@@ -1,6 +1,8 @@
 package com.example;
-import com.fasterxml.jackson.databind.ObjectMapper;
-import com.fasterxml.jackson.databind.JsonNode;
+import com.google.gson.Gson;
+import com.google.gson.JsonObject;
+import com.google.gson.JsonParser;
+
 import org.jsoup.Jsoup;
 import org.jsoup.nodes.Document;
 import org.jsoup.nodes.Element;
@@ -21,6 +23,10 @@ import java.util.stream.Stream;
 
 import javax.management.RuntimeErrorException;
 
+/**
+ * Hello world!
+ *
+ */
 public class App 
 {
     public static void main( String[] args )
@@ -47,8 +53,8 @@ public class App
 
     }
     //Change to return tokens
-    public static void parseJsonAndHtml(String resourcePath) {
-        ObjectMapper mapper = new ObjectMapper();
+    public static List<String> parseJsonAndHtml(String resourcePath) {
+        Gson gson = new Gson();
 
         try (InputStream in = App.class
                 .getClassLoader()
@@ -57,9 +63,9 @@ public class App
             if (in == null) {
                 throw new RuntimeException("Resource not found: " + resourcePath);
             }
-            JsonNode root = mapper.readTree(in);
+            JsonObject root = JsonParser.parseReader(new java.io.InputStreamReader(in)).getAsJsonObject();
 
-            String html = root.path("content").asText();
+            String html = root.has("content") ? root.get("content").getAsString() : "";
 
             Document doc = Jsoup.parse(html);
             
@@ -73,6 +79,7 @@ public class App
             if (contentDiv == null) { 
                 //replace terminal log with file logging
                 System.out.println("No content div found");
+                return List.of();
             }
 
             List<String> tokens = new ArrayList<>();
@@ -80,49 +87,35 @@ public class App
 
             for (Element elem : relevantTags) {
                 
-                    String text = elem.text();
-                    List<String> liTokens = tokenize(text);
-                    tokens.addAll(liTokens);
-                    }
+                    // Only process if this element doesn't have a parent that is also in our list
+    if (elem.parents().stream().noneMatch(p -> p.is("h1, h2, h3, p, li"))) {
+        tokens.addAll(tokenize(elem.text()));
+    }
+}
                 
             
             System.out.println("Total tokens extracted: " + tokens.size());
             System.out.println("All tokens" + tokens);
+            return tokens;
 
+        
 
-            //Add tokens,docid to inverted index
-            int docId = 0;
-            Map<String, Set<Integer>> invertedIndex = new HashMap<>();
-
-            
-            for (String token: tokens) {
-                invertedIndex.computeIfAbsent(token, k -> new HashSet<>()).add(docId);
-            }
-            try (FileWriter writer = new FileWriter("inverted_index.txt")) { 
-                for (String token: invertedIndex.keySet()) {
-                    writer.write(token + " : " + invertedIndex.get(token).toString() + "\n");
-                    
-                }
-
-            }
-            catch (IOException e) {
-                e.printStackTrace();
-            }
     }       
 
         catch (IOException e) {
             System.err.println("Failed to read JSON file: " + resourcePath);
             e.printStackTrace();
+            return List.of();
         }
+
+         
     }
     private static void writeIndexToFile(Map<String, Set<Integer>> index) {
         try (FileWriter writer = new FileWriter("inverted_index.txt")) {
             for (String token : index.keySet()) {
-                writer.write(token);
-                for (int docId : index.get(token)) {
                     writer.write(token + " : " + index.get(token) + "\n");
                 
-                }
+                
             }   
         
         }
@@ -133,7 +126,7 @@ public class App
     public static void createPartialIndex(String Folder) {
 
         int docId = 0;
-        Map<String, List<Integer>> invertedIndex = new HashMap<>();
+        Map<String, Set<Integer>> invertedIndex = new HashMap<>();
 
         try {
         ClassLoader cl = Thread.currentThread().getContextClassLoader();
@@ -144,15 +137,23 @@ public class App
         try(Stream<Path> files = Files.list(folderPath)) {
             for (Path path : files.filter(Files::isRegularFile).toList()) {
                 docId ++;
-                String content = Files.readString(path);
 
+                String resourceName = Folder + "/" + path.getFileName().toString();
                 System.out.println("Indexing docId=" + docId + " =" + path.getFileName());
+                List<String> tokens = parseJsonAndHtml(resourceName);
+                Set<String> uniqueTokens = new HashSet<>(tokens);
+
+                for (String token: uniqueTokens) {
+                invertedIndex.computeIfAbsent(token, k -> new HashSet<>()).add(docId);
+            }
+
 
             }
         }
     } catch(Exception e) {
         throw new RuntimeException(e);
     }
+    writeIndexToFile(invertedIndex);
             
 
     }
