@@ -38,10 +38,24 @@ public class App
     }
 
     public static List<String> tokenize(String text) {
+
+        
         text = text.toLowerCase();
         //removes all non ascii characters
         text = text.replaceAll("[^a-z0-9\\s]"," ");
         String[ ] tokensArray = text.split("\\s+");
+        
+
+        //TODO: Add stemming
+
+        //TODO: Add word positions
+
+        //TODO: Store hyperlinks for page
+
+        //TODO: Frequeny TF 
+
+        //TODO: Look into 
+
         
         List<String> tokens = new ArrayList<>();
         for (String token : tokensArray) {
@@ -160,3 +174,4 @@ public class App
 
 
 }
+// look into json vs txt
