@@ -8,8 +8,8 @@
   <name>SearchEngine</name>
   <url>http://maven.apache.org</url>
   <properties>
-  <maven.compiler.source>21</maven.compiler.source>
-  <maven.compiler.target>21</maven.compiler.target>
+  <maven.compiler.source>17</maven.compiler.source>
+  <maven.compiler.target>17</maven.compiler.target>
   </properties>
   <dependencies>
       <dependency>
@@ -33,5 +33,17 @@
       <artifactId>gson</artifactId>
       <version>2.13.2</version>
     </dependency>
-  </dependencies>
+    </dependencies>
+    <build>
+        <plugins>
+            <plugin>
+                <groupId>org.codehaus.mojo</groupId>
+                <artifactId>exec-maven-plugin</artifactId>
+                <version>3.6.2</version>
+                <configuration>
+                    <mainClass>com.example.FilterDEV</mainClass>
+                </configuration>
+            </plugin>
+        </plugins>
+  </build>
 </project>
