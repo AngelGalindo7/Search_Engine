@@ -6,6 +6,12 @@ import opennlp.tools.parser.Parse;
 import opennlp.tools.stemmer.PorterStemmer;
 
 public class Tokenizer {
+    public static void main(String[] args) {
+        List<String> tokens = tokenize("wics ics");
+        for (String token : tokens) {
+            System.out.println(token);
+        }
+    }
     public static List<String> tokenize(String text) {
         text = text.toLowerCase()
                    .replaceAll("\\.", "")
