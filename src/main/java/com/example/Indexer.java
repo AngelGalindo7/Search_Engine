@@ -50,6 +50,16 @@ public class Indexer {
         System.out.println("Size of invertedIndex " + invertedIndex.size());
         System.out.println("Size of \"wic\" postings " + invertedIndex.get("wic").size());
         System.out.println("Size of docMetadata " + docMetadata.size());
+
+        // writeIndex();
+    }
+
+    public static void writeIndex() {
+        List<String> sortedInvertedTokens = new ArrayList<>(invertedIndex.keySet());
+        Collections.sort(sortedInvertedTokens);
+
+
+        // You can use this to write to file, etc...
     }
 
 
