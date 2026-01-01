@@ -2,6 +2,8 @@ package com.example;
 
 import com.google.gson.Gson;
 
+import java.io.FileWriter;
+
 import java.io.IOException;
 import java.io.FileReader;
 import java.io.Reader;
@@ -51,16 +53,46 @@ public class Indexer {
         System.out.println("Size of \"wic\" postings " + invertedIndex.get("wic").size());
         System.out.println("Size of docMetadata " + docMetadata.size());
 
-        // writeIndex();
+        writeIndex();
+        writeDocMetadata();
     }
 
     public static void writeIndex() {
         List<String> sortedInvertedTokens = new ArrayList<>(invertedIndex.keySet());
         Collections.sort(sortedInvertedTokens);
-
-
+        
         // You can use this to write to file, etc...
+        try (FileWriter writer = new FileWriter("inverted_index.txt")) {
+            for (String term :sortedInvertedTokens) {
+                writer.write(term + " -> ");
+
+                List<Posting> postings = invertedIndex.get(term);
+
+                for (Posting p : postings) {
+                    writer.write(" " + p.docId + ":" + p.tf + ":" + p.tagMask);
+                }
+
+                writer.write("\n");
+
+
+            }
+        }
+        catch (IOException e){
+            e.printStackTrace();
+        }
+
     }
+    public static void writeDocMetadata() {
+    try (FileWriter writer = new FileWriter("doc_metadata.txt")) {
+        for (Map.Entry<Integer, DocMeta> entry : docMetadata.entrySet()) {
+            int docId = entry.getKey();
+            DocMeta meta = entry.getValue();
+            writer.write(docId + " -> " + meta.url + "\n");
+        }
+    } catch (IOException e) {
+        e.printStackTrace();
+    }
+}
 
 
     public static void indexDirectory() {
