@@ -15,6 +15,9 @@ public class LoadIndex {
 
         System.out.println("Loaded inverted index with " + invertedIndex.size() + " terms");
         System.out.println("Loaded doc metadata with " + docMetadata.size() + " documents");
+
+        Map<String,List<PostingTfIdf>> tfIdfMap = Indexer.computeTfIdf(invertedIndex, docMetadata);
+        Indexer.writeTfIdfMap(tfIdfMap);
     }
 
     public static void loadInvertedIndex(String fileName) {
@@ -58,16 +61,18 @@ public class LoadIndex {
                 String line = scanner.nextLine().trim();
                 if (line.isEmpty()) continue;
 
-                String[] parts = line.split(" -> ");
-                if (parts.length != 2) continue;
+                String[] parts = line.split("\\|");
+                if (parts.length != 3) continue;
 
                 int docId = Integer.parseInt(parts[0]);
                 String url = parts[1];
+                int length = Integer.parseInt(parts[2]);
 
-                docMetadata.put(docId, new DocMeta(url, 0)); 
+                docMetadata.put(docId, new DocMeta(url, length)); 
             }
         } catch (IOException e) {
             e.printStackTrace();
         }
     }
+
 }

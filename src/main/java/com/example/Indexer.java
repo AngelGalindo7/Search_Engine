@@ -16,6 +16,8 @@ class TokenResult {
     int tagMask;
 }
 
+
+
 class Posting {
     int docId;
     int tf;
@@ -38,6 +40,16 @@ class DocMeta {
     }
 }
 
+class PostingTfIdf {
+    int docId;
+    double tfIdf;
+
+    public PostingTfIdf(int docId, double tfIdf) {
+        this.docId = docId;
+        this.tfIdf = tfIdf;
+    }
+}
+
 public class Indexer {
 
     static int docId = 0;
@@ -56,6 +68,31 @@ public class Indexer {
         writeIndex();
         writeDocMetadata();
     }
+
+    public static void writeTfIdfMap(Map<String, List<PostingTfIdf>> tfIdfMap) {
+    List<String> sortedTerms = new ArrayList<>(tfIdfMap.keySet());
+    Collections.sort(sortedTerms); // optional: alphabetical order
+
+    try (FileWriter writer = new FileWriter("term_tf_idf.txt")) {
+
+        for (String term : sortedTerms) {
+            writer.write(term + " ->");
+
+            List<PostingTfIdf> postings = tfIdfMap.get(term);
+            for (PostingTfIdf p : postings) {
+                // write as docId:tfIdf
+                writer.write(" " + p.docId + ":" + String.format("%.6f", p.tfIdf));
+            }
+
+            writer.write("\n");
+        }
+
+        System.out.println("TF-IDF map written to " + "term_tf_idf.txt");
+
+    } catch (IOException e) {
+        e.printStackTrace();
+    }
+}
 
     public static void writeIndex() {
         List<String> sortedInvertedTokens = new ArrayList<>(invertedIndex.keySet());
@@ -87,7 +124,7 @@ public class Indexer {
         for (Map.Entry<Integer, DocMeta> entry : docMetadata.entrySet()) {
             int docId = entry.getKey();
             DocMeta meta = entry.getValue();
-            writer.write(docId + " -> " + meta.url + "\n");
+            writer.write(docId + "|" + meta.url + "|" + meta.length + "\n");
         }
     } catch (IOException e) {
         e.printStackTrace();
@@ -144,9 +181,38 @@ public class Indexer {
                          .add(new Posting(currentDocId, tr.tf, tr.tagMask));
         }
 
+        // calculate 
         // populate docMetaData
         int docLength = tokenMap.values().stream().mapToInt(tr -> tr.tf).sum();
         docMetadata.put(currentDocId, new DocMeta(url, docLength));
+    }
+
+    public  static Map<String, List<PostingTfIdf>> computeTfIdf(Map<String,List<Posting>> invertedIndex, Map<Integer, DocMeta> docMetadata) {
+        Map<String, List<PostingTfIdf>> tfIdfMap = new HashMap<>();
+        int totalDocs = docMetadata.size();
+
+        for (Map.Entry<String, List<Posting>> entry: invertedIndex.entrySet()){
+
+            String term = entry.getKey();
+            List<Posting> postings = entry.getValue();
+            
+            int df = postings.size();
+            double idf = Math.log((double)(totalDocs + 1) / (df + 1)) + 1; // smoothed IDF
+
+            List<PostingTfIdf> tfIdfList = new ArrayList<>(); 
+            for(Posting p: postings){
+                int docLength = docMetadata.get(p.docId).length;
+
+                double tf = (double) p.tf / docLength;
+                double tfIdf = idf * tf;
+                tfIdfList.add(new PostingTfIdf(p.docId,tfIdf));
+
+            }
+
+        tfIdfMap.put(term,tfIdfList);
+        }
+    
+    return tfIdfMap;
     }
 }
 
