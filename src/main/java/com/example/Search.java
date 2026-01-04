@@ -72,15 +72,12 @@ public class Search {
     }
     
     public static double getTagMultiplier(int tagMask) {
-        double multiplier = 1.0;
-
-        if ((tagMask & Tag.TITLE.bit) != 0) multiplier = Math.max(multiplier, 3.0);
-        if ((tagMask & Tag.HEADING.bit) != 0) multiplier = Math.max(multiplier, 2.0);
-        if ((tagMask & Tag.ANCHOR.bit) != 0) multiplier = Math.max(multiplier, 2.0);
-        if ((tagMask & Tag.EMPHASIS.bit) != 0) multiplier = Math.max(multiplier, 1.5);
-        if ((tagMask & Tag.BODY.bit) != 0) multiplier = Math.max(multiplier, 1.0);
-
-        return multiplier;
+        // Some tags might have multiple bits on, so this returns the highest tag bit instead
+        if ((tagMask & Tag.TITLE.bit) != 0) return 3.0;
+        if ((tagMask & Tag.HEADING.bit) != 0) return 2.0;
+        if ((tagMask & Tag.ANCHOR.bit) != 0) return 2.0;
+        if ((tagMask & Tag.EMPHASIS.bit) != 0) return 1.5;
+        if ((tagMask & Tag.BODY.bit) != 0) return 1.0;
     }
 
 
