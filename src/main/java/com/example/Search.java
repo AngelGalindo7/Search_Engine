@@ -13,6 +13,7 @@ public class Search {
 
     public static Map<String, TokenMeta> tokenMetadata;
     public static Map<Integer, DocMeta> docMetadata;
+    public static final int TOTAL_DOCS = 55_385; 
 
     public static void main(String[] args) {
         loadDependencies();
@@ -36,9 +37,6 @@ public class Search {
     public static void search(String query) {
         List<String> queryTokens = Tokenizer.tokenize(query);
 
-        // sort tokens by df, since its faster to join docIds by starting with the token with smallest df
-        queryTokens.sort(Comparator.comparingInt(t -> tokenMetadata.get(t).df));
-
         // mini inverted index of the query tokens
         HashMap<String, List<Posting>> queryIndex = new HashMap<>();
         for (String token : queryTokens) {
@@ -46,10 +44,27 @@ public class Search {
             queryIndex.put(token, postings);
         }
 
-        // now the search starts here!
-
+        // now the search starts here
+        HashMap<Integer, Double> docRank = new HashMap<>();
         for (Map.Entry<String, List<Posting>> entry : queryIndex.entrySet()) {
-            System.out.println(entry.getKey() + " has " + entry.getValue().size() + " postings");
+            String token = entry.getKey();
+            int df = tokenMetadata.get(token).df;
+
+            List<Posting> postings = entry.getValue();
+            for (Posting p : postings) { 
+                double tf = (double)p.tf / docMetadata.get(p.docId).length; // normalize tf
+                double tfIdf = p.tf * (Math.log(TOTAL_DOCS / df) + 1);
+                double score = docRank.getOrDefault(token, 0.0) + tfIdf;
+                docRank.put(p.docId, score);
+            }
+        }
+
+        List<Integer> result = new ArrayList<>(docRank.keySet());
+        result.sort(Comparator.comparing(docRank::get).reversed());
+
+        for (int i = 0; i < 10; i++) {
+            int docId = result.get(i);
+            System.out.println("DOC ID: " + docId + ": " + docMetadata.get(docId).url);
         }
     }
 
