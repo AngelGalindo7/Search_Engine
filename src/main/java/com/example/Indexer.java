@@ -90,8 +90,6 @@ public class Indexer {
         writeDocMetadata();
         writeTokenMetadata();
 
-        List<Posting> test = getTokenPostings("wic");
-        System.out.println("Size of \"wic\" postings from retrieval " + test.size());
 
         Map<Integer, DocMeta> doctest = readDocMetadata();
         DocMeta t = doctest.get(0);
@@ -100,32 +98,6 @@ public class Indexer {
     }
 
 
-    public static List<Posting> getTokenPostings(String token) {
-        TokenMeta tm = tokenMetadata.get(token);
-        int df = tm.df;
-        long offset = tm.offset;
-        int length = tm.length; 
-
-        List<Posting> postings = new ArrayList<>(df);
-
-        try (FileChannel channel = FileChannel.open(Path.of("index.bin"), StandardOpenOption.READ)) {
-            ByteBuffer buf = ByteBuffer.allocate(length);
-            channel.read(buf, offset);
-            buf.flip();
-
-            for (int i = 0; i < df; i++) {
-                int docId = buf.getInt();
-                int tf = buf.getInt();
-                int tagMask = buf.getInt();
-
-                postings.add(new Posting(docId, tf, tagMask));
-            }
-        } catch (IOException e){
-            e.printStackTrace();
-        }
-
-        return postings;
-    }
 
     public static void writeIndex() {
         List<String> sortedInvertedTokens = new ArrayList<>(invertedIndex.keySet());
@@ -271,6 +243,7 @@ public class Indexer {
 
             List<String> tokens = Tokenizer.tokenize(text);
             for (String token : tokens) {
+                if (token.isEmpty()) continue;
                 TokenResult tr = tokenMap.computeIfAbsent(token, k -> new TokenResult());
                 tr.tf += 1;
                 tr.tagMask |= tag.bit;
