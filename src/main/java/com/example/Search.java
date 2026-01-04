@@ -78,6 +78,8 @@ public class Search {
         if ((tagMask & Tag.ANCHOR.bit) != 0) return 2.0;
         if ((tagMask & Tag.EMPHASIS.bit) != 0) return 1.5;
         if ((tagMask & Tag.BODY.bit) != 0) return 1.0;
+
+        return 1.0;
     }
 
 
