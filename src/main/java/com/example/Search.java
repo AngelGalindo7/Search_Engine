@@ -48,25 +48,41 @@ public class Search {
         HashMap<Integer, Double> docRank = new HashMap<>();
         for (Map.Entry<String, List<Posting>> entry : queryIndex.entrySet()) {
             String token = entry.getKey();
-            int df = tokenMetadata.get(token).df;
+            double idf = Math.log(TOTAL_DOCS / tokenMetadata.get(token).df) + 1;
 
             List<Posting> postings = entry.getValue();
             for (Posting p : postings) { 
-                double tf = (double)p.tf / docMetadata.get(p.docId).length; // normalize tf
-                double tfIdf = p.tf * (Math.log(TOTAL_DOCS / df) + 1);
-                double score = docRank.getOrDefault(token, 0.0) + tfIdf;
-                docRank.put(p.docId, score);
+                double tf = (double) p.tf / docMetadata.get(p.docId).length;
+                double tagMult = getTagMultiplier(p.tagMask);
+
+                // tf-idf + tag boost
+                double score = (p.tf * idf) * tagMult;
+                                                   ;
+                docRank.put(p.docId, docRank.getOrDefault(token, 0.0) + score);
             }
         }
 
         List<Integer> result = new ArrayList<>(docRank.keySet());
         result.sort(Comparator.comparing(docRank::get).reversed());
 
-        for (int i = 0; i < 10; i++) {
+        for (int i = 0; i < 20; i++) {
             int docId = result.get(i);
             System.out.println("DOC ID: " + docId + ": " + docMetadata.get(docId).url);
         }
     }
+    
+    public static double getTagMultiplier(int tagMask) {
+        double multiplier = 1.0;
+
+        if ((tagMask & Tag.TITLE.bit) != 0) multiplier = Math.max(multiplier, 3.0);
+        if ((tagMask & Tag.HEADING.bit) != 0) multiplier = Math.max(multiplier, 2.0);
+        if ((tagMask & Tag.ANCHOR.bit) != 0) multiplier = Math.max(multiplier, 2.0);
+        if ((tagMask & Tag.EMPHASIS.bit) != 0) multiplier = Math.max(multiplier, 1.5);
+        if ((tagMask & Tag.BODY.bit) != 0) multiplier = Math.max(multiplier, 1.0);
+
+        return multiplier;
+    }
+
 
     public static List<Posting> getTokenPostings(String token) {
         TokenMeta tm = tokenMetadata.get(token);
