@@ -251,7 +251,7 @@ public class Indexer {
             if (tag == Tag.TITLE) title = text;
 
             List<String> tokens = Tokenizer.tokenize(text);
-            tokens.addAll(Tokenizer.getNGrams(tokens, 2)); // bi-grams
+            // tokens.addAll(Tokenizer.getNGrams(tokens, 2)); // bi-grams
 
             for (String token : tokens) {
                 if (token.isEmpty()) continue;

@@ -14,6 +14,7 @@ public class Search {
     public static Map<String, TokenMeta> tokenMetadata;
     public static Map<Integer, DocMeta> docMetadata;
     public static final int TOTAL_DOCS = 55_385; 
+    public static final int AVG_DOC_LENGTH = 20; 
 
     public static void main(String[] args) {
         loadDependencies();
@@ -39,7 +40,7 @@ public class Search {
 
     public static void search(String query) {
         List<String> queryTokens = Tokenizer.tokenize(query);
-        queryTokens.addAll(Tokenizer.getNGrams(queryTokens, 2));
+        // queryTokens.addAll(Tokenizer.getNGrams(queryTokens, 2));
 
         // mini inverted index of the query tokens
         HashMap<String, List<Posting>> queryIndex = new HashMap<>();
@@ -48,20 +49,47 @@ public class Search {
             queryIndex.put(token, postings);
         }
 
-        // now the search starts here
         HashMap<Integer, Double> docRank = new HashMap<>();
+
+        // TF-IDF version
+        // for (Map.Entry<String, List<Posting>> entry : queryIndex.entrySet()) {
+        //     String token = entry.getKey();
+        //     double idf = Math.log(TOTAL_DOCS / tokenMetadata.get(token).df) + 1;
+        //
+        //     List<Posting> postings = entry.getValue();
+        //     for (Posting p : postings) { 
+        //         double tf = (double) p.tf / docMetadata.get(p.docId).length;
+        //         double tagMult = getTagMultiplier(p.tagMask);
+        //
+        //         // tf-idf + tag boost
+        //         double score = (p.tf * idf) * tagMult;
+        //
+        //         docRank.put(p.docId, docRank.getOrDefault(token, 0.0) + score);
+        //     }
+        // }
+
+        // BM25 version
         for (Map.Entry<String, List<Posting>> entry : queryIndex.entrySet()) {
             String token = entry.getKey();
-            double idf = Math.log(TOTAL_DOCS / tokenMetadata.get(token).df) + 1;
+            int df = tokenMetadata.get(token).df;
+            double idf = Math.log(((TOTAL_DOCS - df + 0.5) / df + 0.5) + 1);
 
             List<Posting> postings = entry.getValue();
             for (Posting p : postings) { 
-                double tf = (double) p.tf / docMetadata.get(p.docId).length;
+                double tf = (double) p.tf; 
+                int docLength = docMetadata.get(p.docId).length;
+
+                double k1 = 1.2;
+                double b = 0.75;
+                double num = tf * (k1 + 1);
+                double denom = tf + k1 * (1 - b + b * (docLength / AVG_DOC_LENGTH));
+
+                double bm25 = (num / denom) * idf;
                 double tagMult = getTagMultiplier(p.tagMask);
 
-                // tf-idf + tag boost
-                double score = (p.tf * idf) * tagMult;
-                                                   ;
+                // bm25 + tag boost
+                double score = bm25 * tagMult;
+
                 docRank.put(p.docId, docRank.getOrDefault(token, 0.0) + score);
             }
         }
@@ -71,10 +99,10 @@ public class Search {
 
         for (int i = 0; i < 20; i++) {
             int docId = result.get(i);
-            System.out.println("DOC ID: " + docId + ": " + docMetadata.get(docId).url);
+            System.out.println("DOC ID: " + docId + ": " + docMetadata.get(docId).url + " has a score of " + docRank.get(docId));
         }
     }
-    
+
     public static double getTagMultiplier(int tagMask) {
         // Some tags might have multiple bits on, so this returns the highest tag bit instead
         if ((tagMask & Tag.TITLE.bit) != 0) return 3.0;
