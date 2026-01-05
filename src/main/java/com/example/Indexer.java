@@ -51,11 +51,13 @@ class TokenMeta {
 
 class DocMeta {
     String url;
+    String title;
     int length;
 
-    DocMeta(String url, int length) {
+    DocMeta(String url, int length, String title) {
         this.url = url;
         this.length = length;
+        this.title = title;
     }
 }
 
@@ -92,9 +94,12 @@ public class Indexer {
 
 
         Map<Integer, DocMeta> doctest = readDocMetadata();
+
+        System.out.println("SIZE :" + doctest.size());
+
         DocMeta t = doctest.get(0);
 
-        System.out.println("doc id 0: " + t.url + " " + t.length);
+        System.out.println("doc id 0: " + t.url + " " + t.length + " " + t.title);
     }
 
 
@@ -144,13 +149,14 @@ public class Indexer {
                 if (line.isEmpty()) continue;
 
                 String[] parts = line.split(" ");
-                if (parts.length != 3) continue;
+                if (parts.length != 4) continue;
 
                 int docId = Integer.parseInt(parts[0]);
                 String url = parts[1];
                 int length = Integer.parseInt(parts[2]);
+                String title = parts[3].replace("^", " ");
 
-                docMetadata.put(docId, new DocMeta(url, length)); 
+                docMetadata.put(docId, new DocMeta(url, length, title)); 
             }
         } catch (IOException e) {
             e.printStackTrace();
@@ -164,7 +170,7 @@ public class Indexer {
             for (Map.Entry<Integer, DocMeta> entry : docMetadata.entrySet()) {
                 int docId = entry.getKey();
                 DocMeta meta = entry.getValue();
-                writer.write(docId + " " + meta.url + " " + meta.length + "\n");
+                writer.write(docId + " " + meta.url + " " + meta.length + " " + meta.title.replace(" ", "^") + "\n");
             }
         } catch (IOException e) {
             e.printStackTrace();
@@ -235,11 +241,14 @@ public class Indexer {
         // tokenMap calculates the tf and tag mask for each token in the document
         // which can be used to create the inverted index
         Map<String, TokenResult> tokenMap = new HashMap<>();
+        String title = "N/A"; // kludge, but dont want to make repeated json parse again
 
         // populate tokenMap
         for (Node node : doc_nodes) {
             String text = node.text;
             Tag tag = node.tag;
+
+            if (tag == Tag.TITLE) title = text;
 
             List<String> tokens = Tokenizer.tokenize(text);
             for (String token : tokens) {
@@ -262,7 +271,7 @@ public class Indexer {
         // calculate 
         // populate docMetaData
         int docLength = tokenMap.values().stream().mapToInt(tr -> tr.tf).sum();
-        docMetadata.put(currentDocId, new DocMeta(url, docLength));
+        docMetadata.put(currentDocId, new DocMeta(url, docLength, title));
     }
 
 

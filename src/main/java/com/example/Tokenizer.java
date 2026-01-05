@@ -12,6 +12,7 @@ public class Tokenizer {
             System.out.println(token);
         }
     }
+
     public static List<String> tokenize(String text) {
         text = text.toLowerCase()
                    .replaceAll("\\.", "")

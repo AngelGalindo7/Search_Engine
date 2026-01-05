@@ -63,7 +63,7 @@ public class Parser {
 
         return filePaths;
     }
-
+    
 
     public static List<Node> parseContent(String html) {
         List<Node> nodes = new ArrayList<>();
