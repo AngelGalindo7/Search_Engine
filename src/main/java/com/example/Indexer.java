@@ -188,7 +188,7 @@ public class Indexer {
                 String[] parts = line.split(" ");
                 if (parts.length != 4) continue;
 
-                String token = parts[0];
+                String token = parts[0].replace("^", " ");
                 int df = Integer.parseInt(parts[1]);
                 long offset = Long.parseLong(parts[2]);
                 int length = Integer.parseInt(parts[3]);
@@ -205,7 +205,7 @@ public class Indexer {
     public static void writeTokenMetadata() {
         try (FileWriter writer = new FileWriter("token_meta.txt")) {
             for (Map.Entry<String, TokenMeta> entry : tokenMetadata.entrySet()) {
-                String token = entry.getKey();
+                String token = entry.getKey().replace(" ", "^");
                 TokenMeta meta = entry.getValue();
                 writer.write(token + " " + meta.df + " " + meta.offset + " " + meta.length + "\n");
             }
@@ -251,6 +251,8 @@ public class Indexer {
             if (tag == Tag.TITLE) title = text;
 
             List<String> tokens = Tokenizer.tokenize(text);
+            tokens.addAll(Tokenizer.getNGrams(tokens, 2)); // bi-grams
+
             for (String token : tokens) {
                 if (token.isEmpty()) continue;
                 TokenResult tr = tokenMap.computeIfAbsent(token, k -> new TokenResult());

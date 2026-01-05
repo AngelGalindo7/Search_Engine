@@ -22,9 +22,12 @@ public class Search {
         
         List<Posting> test = getTokenPostings("wic");
         System.out.println("Size of \"wic\" postings from retrieval " + test.size());
-
-        String query = "grace hopper";
+        
+        long start = System.nanoTime();
+        String query = "cristina lopes";
         search(query);
+        long end = System.nanoTime();
+        System.out.println((end - start) / 1_000_000 + " ms to SEARCH");
 
     }
 
@@ -36,6 +39,7 @@ public class Search {
 
     public static void search(String query) {
         List<String> queryTokens = Tokenizer.tokenize(query);
+        queryTokens.addAll(Tokenizer.getNGrams(queryTokens, 2));
 
         // mini inverted index of the query tokens
         HashMap<String, List<Posting>> queryIndex = new HashMap<>();
