@@ -55,11 +55,11 @@ class DocMeta {
     int length;
     double pageRank;
 
-    DocMeta(String url, int length, String title) {
+    DocMeta(String url, int length, String title, Double pageRank) {
         this.url = url;
         this.length = length;
         this.title = title;
-        this.pageRank = 0.0;
+        this.pageRank = pageRank;
     }
 }
 
@@ -152,14 +152,15 @@ public class Indexer {
                 if (line.isEmpty()) continue;
 
                 String[] parts = line.split(" ");
-                if (parts.length != 4) continue;
+                if (parts.length != 5) continue;
 
                 int docId = Integer.parseInt(parts[0]);
                 String url = parts[1];
                 int length = Integer.parseInt(parts[2]);
                 String title = parts[3].replace("^", " ");
+                Double pageRank = Double.parseDouble(parts[4]);
 
-                docMetadata.put(docId, new DocMeta(url, length, title)); 
+                docMetadata.put(docId, new DocMeta(url, length, title, pageRank)); 
             }
         } catch (IOException e) {
             e.printStackTrace();
@@ -173,7 +174,7 @@ public class Indexer {
             for (Map.Entry<Integer, DocMeta> entry : docMetadata.entrySet()) {
                 int docId = entry.getKey();
                 DocMeta meta = entry.getValue();
-                writer.write(docId + " " + meta.url + " " + meta.length + " " + meta.title.replace(" ", "^") + "\n");
+                writer.write(docId + " " + meta.url + " " + meta.length + " " + meta.title.replace(" ", "^") + " " + meta.pageRank + "\n");
             }
         } catch (IOException e) {
             e.printStackTrace();
@@ -283,7 +284,7 @@ public class Indexer {
         // calculate 
         // populate docMetaData
         int docLength = tokenMap.values().stream().mapToInt(tr -> tr.tf).sum();
-        docMetadata.put(currentDocId, new DocMeta(url, docLength, title));
+        docMetadata.put(currentDocId, new DocMeta(url, docLength, title, 0.0));
     }
 
 
