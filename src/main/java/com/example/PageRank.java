@@ -14,8 +14,9 @@ public class PageRank {
     private static Map<Integer, Set<Integer>> outgoing = new HashMap<>();
     private static Map<Integer, Double> pageRank = new HashMap<>();
     
-    // Reverse lookup to find ID from URL
     private static Map<String, Integer> urlToId = new HashMap<>();
+
+    public static Map<Integer, DocMeta> docMetadata = Indexer.readDocMetadata();
 
 
     public static void main(String[] args) {
@@ -24,20 +25,20 @@ public class PageRank {
         initPageRank();
         computePageRank();
         printPageRank();
-        verifySum();
-        writePRMap();
+        //verifySum();
+        updateDocMetadata();
+
     }
     
     
     public static void setupUrlMapping() {
-        Indexer indexer = new Indexer();
-        // Call your existing method
-        Map<Integer, DocMeta> metadata = indexer.readDocMetadata();
+
         
-        for (Map.Entry<Integer, DocMeta> entry : metadata.entrySet()) {
+        for (Map.Entry<Integer, DocMeta> entry : docMetadata.entrySet()) {
             urlToId.put(entry.getValue().url, entry.getKey());
         }
     }
+
     public static void initPageRank() {
         int N = urlToId.size();
         if (N == 0) return;
@@ -57,10 +58,8 @@ public class PageRank {
                 String srcUrl = jsonMap.get("url");
                 Integer srcId = urlToId.get(srcUrl);
 
-                // If the Indexer didn't index this file, skip it
                 if (srcId == null) continue;
 
-                // Ensure the ID exists in our graph
                 incoming.putIfAbsent(srcId, new HashSet<>());
                 outgoing.putIfAbsent(srcId, new HashSet<>());
 
@@ -135,21 +134,8 @@ public class PageRank {
         }
     }
 }
-    /**
-     * Saves the final PageRank scores to a file: docId,score
-     */
-    public static void writePRMap() {
-        try (FileWriter writer = new FileWriter("pagerank.txt")) {
-            for (Map.Entry<Integer, Double> entry : pageRank.entrySet()) {
-                writer.write(entry.getKey() + "," + entry.getValue() + "\n");
-            }
-        } catch (IOException e) {
-            e.printStackTrace();
-        }
-    }
 
 public static void printPageRank() {
-        // Sort by value (rank) descending to show top pages
         List<Map.Entry<Integer, Double>> list = new ArrayList<>(pageRank.entrySet());
         list.sort((a, b) -> b.getValue().compareTo(a.getValue()));
 
@@ -161,19 +147,47 @@ public static void printPageRank() {
         }
     }
 
-    public static void verifySum() {
-    double sum = 0.0;
-    for (double score : pageRank.values()) {
-        sum += score;
+    public static void updateDocMetadata() {
+    for (Map.Entry<Integer, DocMeta> entry : docMetadata.entrySet()) {
+        int docId = entry.getKey();
+        DocMeta meta = entry.getValue();
+
+        Double score = pageRank.getOrDefault(docId, 0.0);
+        
+        meta.pageRank = score;
     }
-    System.out.println("------------------------------------");
-    System.out.printf("Verification - Total PageRank Sum: %.10f\n", sum);
     
-    if (Math.abs(1.0 - sum) < 1e-5) {
-        System.out.println("Result: SUCCESS (Total rank is conserved)");
-    } else {
-        System.out.println("Result: WARNING (Rank leakage detected! Check sink node handling)");
+    saveMetadataToFile();
+}
+
+public static void saveMetadataToFile() {
+    try (FileWriter writer = new FileWriter("doc_meta.txt")) {
+        for (Map.Entry<Integer, DocMeta> entry : docMetadata.entrySet()) {
+            int docId = entry.getKey();
+            DocMeta meta = entry.getValue();
+            
+            // Format: ID URL LENGTH PAGERANK
+            writer.write(docId + " " + meta.url + " " + meta.length + " " + meta.pageRank + "\n");
+        }
+    } catch (IOException e) {
+        e.printStackTrace();
     }
-    System.out.println("------------------------------------");
 }
-}
+
+
+//     public static void verifySum() {
+//     double sum = 0.0;
+//     for (double score : pageRank.values()) {
+//         sum += score;
+//     }
+//     System.out.println("------------------------------------");
+//     System.out.printf("Verification - Total PageRank Sum: %.10f\n", sum);
+    
+//     if (Math.abs(1.0 - sum) < 1e-5) {
+//         System.out.println("Result: SUCCESS (Total rank is conserved)");
+//     } else {
+//         System.out.println("Result: WARNING (Rank leakage detected! Check sink node handling)");
+//     }
+//     System.out.println("------------------------------------");
+// }
+ }
