@@ -100,5 +100,55 @@ public class Parser {
         }
     }
 
+
+    public static List<String> retrieveLinks(String html) {
+    List<String> links = new ArrayList<>();
+    if (html == null || html.isEmpty()) return links;
+
+    org.jsoup.nodes.Document doc = org.jsoup.Jsoup.parse(html);
+    org.jsoup.select.Elements anchorTags = doc.select("a[href]");
+
+    for (org.jsoup.nodes.Element link : anchorTags) {
+        String href = link.attr("href").trim();
+
+        if (href.toLowerCase().startsWith("http")) {
+            
+            String cleanLink = normalizeUrl(href);
+
+            if (cleanLink != null) {
+            links.add(cleanLink);
+            }
+        }
+    }
+    return links;
+}
+
+public static String normalizeUrl(String url) {
+    if (url == null || url.isEmpty()) return null;
+
+    String normalized = url.trim();
+
+    // 1. Remove fragments using indexOf (Cleaner than split)
+    int fragmentIdx = normalized.indexOf('#');
+    if (fragmentIdx != -1) {
+        normalized = normalized.substring(0, fragmentIdx);
+    }
+
+    // 2. Remove trailing slash
+    if (normalized.endsWith("/")) {
+        normalized = normalized.substring(0, normalized.length() - 1);
+    }
+
+    // 3. Lowercase (Generally safe for project scopes)
+    normalized = normalized.toLowerCase();
+
+    // 4. Optional: Remove 'index.html' or 'index.php' 
+    // (Search engines do this because /page and /page/index.html are the same)
+    if (normalized.endsWith("/index.html") || normalized.endsWith("/index.php")) {
+        normalized = normalized.substring(0, normalized.lastIndexOf("/"));
+    }
+
+    return normalized.isEmpty() ? null : normalized;
+}
 }
 
