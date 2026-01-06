@@ -78,7 +78,8 @@ public class Indexer {
     static Map<String, List<Posting>> invertedIndex = new HashMap<>();
     static Map<Integer, DocMeta> docMetadata = new HashMap<>();
     static Map<String, TokenMeta> tokenMetadata = new HashMap<>();
-
+    static Set<String> seenUrls = new HashSet<>();
+    
     public static void main(String[] args) {
         indexDirectory();
         System.out.println("FINISHED indexing " + docId + " documents");
@@ -215,7 +216,7 @@ public class Indexer {
             try (Reader reader = new FileReader(filePath)) {
                 Gson gson = new Gson();
                 Map<String, String> jsonMap = gson.fromJson(reader, Map.class);
-                String doc_url = jsonMap.get("url");
+                String doc_url = Parser.normalizeUrl(jsonMap.get("url"));
                 List<Node> doc_nodes = Parser.parseContent(jsonMap.get("content"));
 
                 indexDocument(doc_url, doc_nodes);
@@ -228,9 +229,16 @@ public class Indexer {
 
 
     public static void indexDocument(String url, List<Node> doc_nodes) {
+        
+        if (seenUrls.contains(url)) {
+        return; 
+    }
+    
+        seenUrls.add(url);
+        
         int currentDocId = docId++;
 
-        System.out.println(currentDocId + " " + url);
+        //System.out.println(currentDocId + " " + url);
 
         // tokenMap calculates the tf and tag mask for each token in the document
         // which can be used to create the inverted index
