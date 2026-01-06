@@ -167,7 +167,7 @@ public static void saveMetadataToFile() {
             DocMeta meta = entry.getValue();
             
             // Format: ID URL LENGTH PAGERANK
-            writer.write(docId + " " + meta.url + " " + meta.length + " " + meta.pageRank + "\n");
+            writer.write(docId + " " + meta.url + " " + meta.length + " " + meta.title.replace(" ", "^") + " "  + meta.pageRank + "\n");
         }
     } catch (IOException e) {
         e.printStackTrace();
