@@ -52,10 +52,12 @@ class TokenMeta {
 class DocMeta {
     String url;
     int length;
+    double pageRank;
 
     DocMeta(String url, int length) {
         this.url = url;
         this.length = length;
+        this.pageRank = 0.0;
     }
 }
 
