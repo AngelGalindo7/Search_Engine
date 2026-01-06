@@ -68,6 +68,9 @@ public class Search {
         //     }
         // }
 
+        double ALPHA = 5.2;
+        double SCALE = 1000000;
+
         // BM25 version
         for (Map.Entry<String, List<Posting>> entry : queryIndex.entrySet()) {
             String token = entry.getKey();
@@ -88,9 +91,18 @@ public class Search {
                 double tagMult = getTagMultiplier(p.tagMask);
 
                 // bm25 + tag boost
-                double score = bm25 * tagMult;
+                double relevanceScore = bm25 * tagMult;
+                
+                // prev relevanceScore 
+                //docRank.put(p.docId, docRank.getOrDefault(p.docId, 0.0) + relevanceScore);
 
-                docRank.put(p.docId, docRank.getOrDefault(token, 0.0) + score);
+                DocMeta meta = docMetadata.get(p.docId);
+                double prBoost = ALPHA * Math.max(0, Math.log10(meta.pageRank * SCALE + 1e-9));
+        
+                double finalScore = relevanceScore + prBoost;
+
+                
+                docRank.put(p.docId, docRank.getOrDefault(p.docId, 0.0) + finalScore);
             }
         }
 
