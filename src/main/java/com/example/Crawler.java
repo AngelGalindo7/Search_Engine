@@ -16,6 +16,7 @@ import java.io.File;
 import java.io.FileWriter;
 import java.net.URI;
 import java.net.URL;
+import java.net.URLConnection;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.security.MessageDigest;
@@ -95,7 +96,12 @@ public class Crawler {
             rateLimit(feedUrl.getHost());
             SyndFeedInput input = new SyndFeedInput();
             input.setAllowDoctypes(false);
-            feed = input.build(new XmlReader(feedUrl));
+            // feed = input.build(new XmlReader(feedUrl));
+            URLConnection conn = feedUrl.openConnection();
+            conn.setConnectTimeout(SecurityGuards.FEED_CONNECT_TIMEOUT_MS);
+            conn.setReadTimeout(SecurityGuards.FEED_READ_TIMEOUT_MS);
+            conn.setRequestProperty("User-Agent", USER_AGENT);
+            feed = input.build(new XmlReader(conn));
         } catch (Exception e) {
             System.err.printf("  [FEED-FAIL] %s -> %s: %s [%s]%n",
                     blog.name, e.getClass().getSimpleName(), trimMsg(e.getMessage()), blog.rssUrl);
