@@ -63,6 +63,7 @@ public class Crawler {
         int totalPosts = 0;
         int totalSkipped = 0;
         int totalFailed = 0;
+        int totalExisting = 0;
         int blogsProcessed = 0;
 
         for (BlogSource blog : blogs) {
@@ -71,23 +72,25 @@ public class Crawler {
             totalPosts += result[0];
             totalSkipped += result[1];
             totalFailed += result[2];
-            System.out.printf("[%d/%d] %-30s posts=%d skipped=%d failed=%d%n",
+            totalExisting += result[3];
+            System.out.printf("[%d/%d] %-30s posts=%d existing=%d skipped=%d failed=%d%n",
                     blogsProcessed, Math.min(blogs.size(), blogLimit),
-                    truncate(blog.name, 30), result[0], result[1], result[2]);
+                    truncate(blog.name, 30), result[0], result[3], result[1], result[2]);
         }
 
         System.out.println("---");
         System.out.println("Total posts written: " + totalPosts);
-        System.out.println("Total skipped (robots.txt): " + totalSkipped);
+        System.out.println("Total existing (already on disk): " + totalExisting);
+        System.out.println("Total skipped (robots/url-unsafe): " + totalSkipped);
         System.out.println("Total failed (network/parse): " + totalFailed);
     }
 
     private static int[] crawlBlog(BlogSource blog, int postLimit) {
-        int written = 0, skipped = 0, failed = 0;
+        int written = 0, skipped = 0, failed = 0, existing = 0;
 
         if (!SecurityGuards.isUrlSafe(blog.rssUrl)) {
             System.err.printf("  [SKIP-FEED] %s -> unsafe rss url: %s%n", blog.name, blog.rssUrl);
-            return new int[]{0, 1, 0};
+            return new int[]{0, 1, 0, 0};
         }
 
         SyndFeed feed;
@@ -105,7 +108,7 @@ public class Crawler {
         } catch (Exception e) {
             System.err.printf("  [FEED-FAIL] %s -> %s: %s [%s]%n",
                     blog.name, e.getClass().getSimpleName(), trimMsg(e.getMessage()), blog.rssUrl);
-            return new int[]{0, 0, 1};
+            return new int[]{0, 0, 1, 0};
         }
 
         String companySlug = slug(blog.name);
@@ -115,7 +118,7 @@ public class Crawler {
         } catch (Exception e) {
             System.err.printf("  [DIR-FAIL] %s -> %s: %s%n",
                     blog.name, e.getClass().getSimpleName(), trimMsg(e.getMessage()));
-            return new int[]{0, 0, 1};
+            return new int[]{0, 0, 1, 0};
         }
 
         Map<String, Integer> postFailReasons = new LinkedHashMap<>();
@@ -138,6 +141,14 @@ public class Crawler {
                 skipped++;
                 continue;
             }
+
+            String hash = sha1(link).substring(0, 16);
+            Path file = companyDir.resolve(hash + ".json");
+            if (Files.exists(file)) {
+                existing++;
+                continue;
+            }
+
             if (!RobotsCheck.isAllowed(link, USER_AGENT)) {
                 postFailReasons.merge("robots-disallow", 1, Integer::sum);
                 skipped++;
@@ -162,8 +173,6 @@ public class Crawler {
                 doc.put("company", blog.name);
                 doc.put("date", entry.getPublishedDate() == null ? "" : entry.getPublishedDate().toInstant().toString());
 
-                String hash = sha1(link).substring(0, 16);
-                Path file = companyDir.resolve(hash + ".json");
                 try (FileWriter w = new FileWriter(file.toFile())) {
                     gson.toJson(doc, w);
                 }
@@ -179,7 +188,7 @@ public class Crawler {
             System.err.printf("  [POST-ISSUES] %s: %s%n", blog.name, postFailReasons);
         }
 
-        return new int[]{written, skipped, failed};
+        return new int[]{written, skipped, failed, existing};
     }
 
     private static String trimMsg(String m) {
