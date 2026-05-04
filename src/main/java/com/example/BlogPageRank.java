@@ -6,6 +6,7 @@ import java.io.FileReader;
 import java.io.FileWriter;
 import java.io.IOException;
 import java.io.Reader;
+import java.net.URI;
 import java.util.*;
 
 /**
@@ -66,12 +67,15 @@ public class BlogPageRank {
         List<String> paths = Parser.parseDirectory("BLOGS");
         if (paths == null) return;
 
+        long intraDomainSkipped = 0;
+
         for (String filePath : paths) {
             try (Reader reader = new FileReader(filePath)) {
                 Map<String, String> jsonMap = gson.fromJson(reader, Map.class);
                 String srcUrl = Parser.normalizeUrl(jsonMap.get("url"));
                 Integer srcId = urlToId.get(srcUrl);
                 if (srcId == null) continue;
+                String srcHost = registrableDomain(srcUrl);
 
                 incoming.putIfAbsent(srcId, new HashSet<>());
                 outgoing.putIfAbsent(srcId, new HashSet<>());
@@ -79,15 +83,35 @@ public class BlogPageRank {
                 List<String> links = Parser.retrieveLinks(jsonMap.get("content"));
                 for (String dstUrl : links) {
                     Integer dstId = urlToId.get(dstUrl);
-                    if (dstId != null && !dstId.equals(srcId)) {
-                        outgoing.get(srcId).add(dstId);
-                        incoming.putIfAbsent(dstId, new HashSet<>());
-                        incoming.get(dstId).add(srcId);
+                    // if (dstId != null && !dstId.equals(srcId)) {
+                    if (dstId == null || dstId.equals(srcId)) continue;
+                    if (!srcHost.isEmpty() && srcHost.equals(registrableDomain(dstUrl))) {
+                        intraDomainSkipped++;
+                        continue;
                     }
+                    outgoing.get(srcId).add(dstId);
+                    incoming.putIfAbsent(dstId, new HashSet<>());
+                    incoming.get(dstId).add(srcId);
                 }
             } catch (IOException e) {
                 e.printStackTrace();
             }
+        }
+
+        System.out.println("Intra-domain edges filtered: " + intraDomainSkipped);
+    }
+
+    private static String registrableDomain(String url) {
+        if (url == null) return "";
+        try {
+            String host = new URI(url).getHost();
+            if (host == null) return "";
+            host = host.toLowerCase();
+            String[] parts = host.split("\\.");
+            if (parts.length <= 2) return host;
+            return parts[parts.length - 2] + "." + parts[parts.length - 1];
+        } catch (Exception e) {
+            return "";
         }
     }
 
