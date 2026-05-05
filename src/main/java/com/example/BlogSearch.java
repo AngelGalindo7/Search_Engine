@@ -77,7 +77,9 @@ public class BlogSearch {
             TokenMeta tm = tokenMetadata.get(token);
             if (tm == null) continue;
             int df = tm.df;
-            double idf = Math.log(((TOTAL_DOCS - df + 0.5) / df + 0.5) + 1);
+            // Buggy: the +0.5 ended up added to the quotient, not the denominator.
+            // double idf = Math.log(((TOTAL_DOCS - df + 0.5) / df + 0.5) + 1);
+            double idf = Math.log((TOTAL_DOCS - df + 0.5) / (df + 0.5) + 1);
 
             for (Posting p : entry.getValue()) {
                 BlogDocMeta meta = docMetadata.get(p.docId);
