@@ -5,6 +5,7 @@ import com.sun.net.httpserver.HttpExchange;
 import com.sun.net.httpserver.HttpServer;
 
 import java.io.IOException;
+import java.io.InputStream;
 import java.io.OutputStream;
 import java.net.InetSocketAddress;
 import java.net.URI;
@@ -37,6 +38,7 @@ public class BlogServer {
         HttpServer server = HttpServer.create(new InetSocketAddress(port), 0);
         server.createContext("/search", BlogServer::handleSearch);
         server.createContext("/health", BlogServer::handleHealth);
+        server.createContext("/", BlogServer::handleStatic);
         server.setExecutor(Executors.newFixedThreadPool(4));
         server.start();
         return server;
@@ -79,6 +81,55 @@ public class BlogServer {
         body.put("totalResults", results.size());
         body.put("results", results);
         sendJson(ex, 200, body);
+    }
+
+    static void handleStatic(HttpExchange ex) throws IOException {
+        if (!"GET".equalsIgnoreCase(ex.getRequestMethod())) {
+            sendJson(ex, 405, Map.of("error", "Method not allowed"));
+            return;
+        }
+
+        String path = ex.getRequestURI().getPath();
+        // Reject path traversal before any classpath lookup.
+        if (path.contains("..") || path.contains("\\")) {
+            sendJson(ex, 400, Map.of("error", "Bad path"));
+            return;
+        }
+        if ("/".equals(path) || "/index.html".equals(path)) {
+            path = "/static/index.html";
+        }
+        if (!path.startsWith("/static/")) {
+            sendJson(ex, 404, Map.of("error", "Not found"));
+            return;
+        }
+
+        try (InputStream is = BlogServer.class.getResourceAsStream(path)) {
+            if (is == null) {
+                sendJson(ex, 404, Map.of("error", "Not found"));
+                return;
+            }
+            byte[] body = is.readAllBytes();
+            ex.getResponseHeaders().set("Content-Type", contentTypeFor(path));
+            ex.sendResponseHeaders(200, body.length);
+            try (OutputStream os = ex.getResponseBody()) {
+                os.write(body);
+            }
+        }
+    }
+
+    static String contentTypeFor(String path) {
+        int dot = path.lastIndexOf('.');
+        String ext = dot < 0 ? "" : path.substring(dot + 1).toLowerCase();
+        return switch (ext) {
+            case "html" -> "text/html; charset=utf-8";
+            case "css"  -> "text/css; charset=utf-8";
+            case "js"   -> "application/javascript; charset=utf-8";
+            case "json" -> "application/json; charset=utf-8";
+            case "svg"  -> "image/svg+xml";
+            case "png"  -> "image/png";
+            case "ico"  -> "image/x-icon";
+            default     -> "application/octet-stream";
+        };
     }
 
     static void handleHealth(HttpExchange ex) throws IOException {
