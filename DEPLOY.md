@@ -28,15 +28,15 @@ https://github.com/<USER>/<REPO>/releases/download/v0.1/blog_token_meta.txt
 
 ## Step 2 — Create the Render Web Service
 
+Render dropped the native Java runtime; we use the **Docker** runtime via the `Dockerfile` in this repo (multi-stage: Maven builds the fat JAR in stage 1, Eclipse Temurin JRE 17 runs it in stage 2).
+
 1. Render Dashboard → **New +** → **Web Service**
 2. Connect your GitHub repo, pick the branch (`engineering-blogs` or `master`)
 3. Configure:
    - **Name**: `engineering-blog-search` (becomes the public hostname)
    - **Region**: pick the one nearest you
    - **Branch**: the one you want to deploy from
-   - **Runtime**: Java (or "Native")
-   - **Build Command**: `mvn -q package -DskipTests`
-   - **Start Command**: `java -Xmx400m -jar target/SearchEngine-1.0-SNAPSHOT.jar`
+   - **Runtime**: **Docker** (Render auto-detects `Dockerfile` at repo root — Build/Start commands disappear from the form because the Dockerfile owns them)
    - **Plan**: Free
    - **Health Check Path**: `/health`
 
