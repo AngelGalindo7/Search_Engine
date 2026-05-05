@@ -18,6 +18,10 @@ blog_token_meta.txt
 .DS_Store
 Thumbs.db
 
+.env
+.env.*
+!.env.example
+
 CLAUDE.md
 PROJECT_MAP.md
 docs/
