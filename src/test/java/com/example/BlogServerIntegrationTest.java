@@ -105,6 +105,40 @@ class BlogServerIntegrationTest {
         assertTrue(body.getAsJsonArray("results").size() <= 50, "top should clamp to MAX_TOP=50");
     }
 
+    @Test
+    void rootServesIndexHtml() throws Exception {
+        HttpResponse<String> resp = get("/");
+        assertEquals(200, resp.statusCode());
+        assertTrue(resp.headers().firstValue("content-type").orElse("").startsWith("text/html"));
+        assertTrue(resp.body().contains("Engineering Blog Search"));
+    }
+
+    @Test
+    void staticCssServedWithCssContentType() throws Exception {
+        HttpResponse<String> resp = get("/static/style.css");
+        assertEquals(200, resp.statusCode());
+        assertTrue(resp.headers().firstValue("content-type").orElse("").startsWith("text/css"));
+    }
+
+    @Test
+    void staticJsServedWithJsContentType() throws Exception {
+        HttpResponse<String> resp = get("/static/search.js");
+        assertEquals(200, resp.statusCode());
+        assertTrue(resp.headers().firstValue("content-type").orElse("").startsWith("application/javascript"));
+    }
+
+    @Test
+    void pathTraversalRejected() throws Exception {
+        HttpResponse<String> resp = get("/static/../etc/passwd");
+        assertEquals(400, resp.statusCode());
+    }
+
+    @Test
+    void unknownStaticReturns404() throws Exception {
+        HttpResponse<String> resp = get("/static/does-not-exist.css");
+        assertEquals(404, resp.statusCode());
+    }
+
     private HttpResponse<String> get(String path) throws Exception {
         HttpRequest req = HttpRequest.newBuilder(URI.create(baseUrl + path)).GET().build();
         return client.send(req, HttpResponse.BodyHandlers.ofString());
