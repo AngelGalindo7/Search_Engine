@@ -61,9 +61,10 @@ public class BlogSearch {
         AVG_DOC_LENGTH = TOTAL_DOCS == 0 ? 1.0 : (double) totalLen / TOTAL_DOCS;
     }
 
-    public static void search(String query) {
-        List<String> queryTokens = Tokenizer.tokenize(query);
+    public static List<SearchResult> searchResults(String query, int topN) {
+        if (query == null || query.isBlank()) return Collections.emptyList();
 
+        List<String> queryTokens = Tokenizer.tokenize(query);
         Map<String, List<Posting>> queryIndex = new HashMap<>();
         for (String token : queryTokens) {
             List<Posting> postings = getTokenPostings(token);
@@ -71,7 +72,6 @@ public class BlogSearch {
         }
 
         Map<Integer, Double> docRank = new HashMap<>();
-
         for (Map.Entry<String, List<Posting>> entry : queryIndex.entrySet()) {
             String token = entry.getKey();
             TokenMeta tm = tokenMetadata.get(token);
@@ -98,18 +98,14 @@ public class BlogSearch {
             }
         }
 
-        if (docRank.isEmpty()) {
-            System.out.println("No results.");
-            return;
-        }
+        if (docRank.isEmpty()) return Collections.emptyList();
 
         List<Integer> ranked = new ArrayList<>(docRank.keySet());
         ranked.sort(Comparator.comparing(docRank::get).reversed());
 
         // Domain diversification: walk the ranked list in score order and apply 0.85^k decay
         // where k is the count of prior same-domain results. Re-sort by decayed score so the
-        // first hit per domain rises and subsequent same-domain hits drop. PubNub's 500
-        // SEO-optimized guides were dominating top-10 on technical queries pre-fix.
+        // first hit per domain rises and subsequent same-domain hits drop.
         Map<String, Integer> domainSeen = new HashMap<>();
         Map<Integer, Double> diversifiedRank = new HashMap<>();
         for (int docId : ranked) {
@@ -121,12 +117,26 @@ public class BlogSearch {
         }
         ranked.sort(Comparator.comparing(diversifiedRank::get).reversed());
 
-        int top = Math.min(10, ranked.size());
+        int top = Math.min(topN, ranked.size());
+        List<SearchResult> out = new ArrayList<>(top);
         for (int i = 0; i < top; i++) {
             int docId = ranked.get(i);
             BlogDocMeta m = docMetadata.get(docId);
+            out.add(new SearchResult(docId, diversifiedRank.get(docId), m.title, m.company, m.url));
+        }
+        return out;
+    }
+
+    public static void search(String query) {
+        List<SearchResult> results = searchResults(query, 10);
+        if (results.isEmpty()) {
+            System.out.println("No results.");
+            return;
+        }
+        for (int i = 0; i < results.size(); i++) {
+            SearchResult r = results.get(i);
             System.out.printf("%2d. [%.3f] %s — %s%n      %s%n",
-                    i + 1, diversifiedRank.get(docId), m.company, m.title, m.url);
+                    i + 1, r.score, r.company, r.title, r.url);
         }
     }
 
