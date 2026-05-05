@@ -494,11 +494,11 @@
       <outline type="rss" text="Servo" title="Servo" xmlUrl="https://servo.org/blog/feed.xml" htmlUrl="https://servo.org/blog"/>
       <outline type="rss" text="Zig" title="Zig" xmlUrl="https://ziglang.org/news/index.xml" htmlUrl="https://ziglang.org/news"/>
       <outline type="rss" text="Go Blog" title="Go Blog" xmlUrl="https://go.dev/blog/feed.atom" htmlUrl="https://go.dev/blog"/>
-      <outline type="rss" text="ClickHouse" title="ClickHouse" xmlUrl="https://clickhouse.com/blog/rss" htmlUrl="https://clickhouse.com/blog"/>
+      <outline type="rss" text="ClickHouse" title="ClickHouse" xmlUrl="https://clickhouse.com/rss.xml" htmlUrl="https://clickhouse.com/blog"/>
       <outline type="rss" text="APNIC" title="APNIC" xmlUrl="https://blog.apnic.net/feed/" htmlUrl="https://blog.apnic.net"/>
       <outline type="rss" text="HashiCorp" title="HashiCorp" xmlUrl="https://hashicorp.com/blog/feed" htmlUrl="https://hashicorp.com/blog"/>
       <outline type="rss" text="Snyk" title="Snyk" xmlUrl="https://snyk.io/blog/feed/" htmlUrl="https://snyk.io/blog"/>
-      <outline type="rss" text="Marc Brooker" title="Marc Brooker" xmlUrl="https://brooker.co.za/blog/feed.xml" htmlUrl="https://brooker.co.za/blog"/>
+      <outline type="rss" text="Marc Brooker" title="Marc Brooker" xmlUrl="https://brooker.co.za/blog/rss.xml" htmlUrl="https://brooker.co.za/blog"/>
       <outline type="rss" text="Jeff Geerling" title="Jeff Geerling" xmlUrl="https://jeffgeerling.com/blog.xml" htmlUrl="https://jeffgeerling.com"/>
       <outline type="rss" text="Raspberry Pi" title="Raspberry Pi" xmlUrl="https://raspberrypi.com/news/feed/" htmlUrl="https://raspberrypi.com/news"/>
     </outline>
