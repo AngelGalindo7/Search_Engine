@@ -24,7 +24,8 @@ public class BlogServer {
     private static final int MAX_TOP = 50;
     private static final Gson GSON = new Gson();
 
-    public static void main(String[] args) throws IOException {
+    public static void main(String[] args) throws IOException, InterruptedException {
+        IndexBootstrap.bootstrapIfNeeded();
         int port = parsePort(args);
         BlogSearch.loadDependencies();
         System.out.printf("Loaded %d tokens, %d docs, avg length %.0f%n",
