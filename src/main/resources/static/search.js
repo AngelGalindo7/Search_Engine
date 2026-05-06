@@ -26,11 +26,13 @@
     return s.length > n ? s.slice(0, n - 1) + '…' : s;
   }
 
+  const MONTHS = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+
   function formatPostDate(iso) {
     if (!iso) return '';
     const m = iso.match(/^(\d{4})-(\d{2})-(\d{2})/);
     if (!m) return '';
-    return `${m[1]}-${m[2]}-${m[3]}`;
+    return `${MONTHS[parseInt(m[2], 10) - 1]} ${parseInt(m[3], 10)}, ${m[1]}`;
   }
 
   function clearResults() {
