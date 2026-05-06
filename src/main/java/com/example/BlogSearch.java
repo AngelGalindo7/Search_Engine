@@ -15,11 +15,14 @@ public class BlogSearch {
     public static int TOTAL_DOCS;
     public static double AVG_DOC_LENGTH;
 
-    private static final double ALPHA = 0.5;
-    private static final double SCALE = 1_000_000;
-    private static final double K1 = 1.2;
-    private static final double B = 0.75;
-    private static final double DOMAIN_DECAY = 0.85;
+    public static final double ALPHA = 0.5;
+    public static final double SCALE = 1_000_000;
+    public static final double K1 = 1.2;
+    public static final double B = 0.75;
+    public static final double DOMAIN_DECAY = 0.85;
+
+    private static volatile List<SearchResult> topByPageRankCache;
+    private static volatile Map<String, Object> statsCache;
 
     private static final String[] DEFAULT_EVAL_QUERIES = {
             "kubernetes networking",
@@ -59,6 +62,50 @@ public class BlogSearch {
         long totalLen = 0;
         for (BlogDocMeta m : docMetadata.values()) totalLen += m.length;
         AVG_DOC_LENGTH = TOTAL_DOCS == 0 ? 1.0 : (double) totalLen / TOTAL_DOCS;
+    }
+
+    public static List<SearchResult> topByPageRank(int n) {
+        if (topByPageRankCache == null) {
+            synchronized (BlogSearch.class) {
+                if (topByPageRankCache == null) {
+                    List<Map.Entry<Integer, BlogDocMeta>> entries = new ArrayList<>(docMetadata.entrySet());
+                    entries.sort((a, b) -> Double.compare(b.getValue().pageRank, a.getValue().pageRank));
+                    List<SearchResult> out = new ArrayList<>(Math.min(50, entries.size()));
+                    for (int i = 0; i < Math.min(50, entries.size()); i++) {
+                        BlogDocMeta m = entries.get(i).getValue();
+                        out.add(new SearchResult(entries.get(i).getKey(), m.pageRank, m.title, m.company, m.url));
+                    }
+                    topByPageRankCache = Collections.unmodifiableList(out);
+                }
+            }
+        }
+        int top = Math.min(Math.max(1, n), topByPageRankCache.size());
+        return topByPageRankCache.subList(0, top);
+    }
+
+    public static Map<String, Object> stats() {
+        if (statsCache == null) {
+            synchronized (BlogSearch.class) {
+                if (statsCache == null) {
+                    Set<String> companies = new HashSet<>();
+                    String latestPostDate = "";
+                    for (BlogDocMeta m : docMetadata.values()) {
+                        if (m.company != null && !m.company.isBlank()) companies.add(m.company);
+                        if (m.postDate != null && m.postDate.compareTo(latestPostDate) > 0) {
+                            latestPostDate = m.postDate;
+                        }
+                    }
+                    Map<String, Object> s = new LinkedHashMap<>();
+                    s.put("totalDocs", TOTAL_DOCS);
+                    s.put("totalTokens", tokenMetadata.size());
+                    s.put("totalBlogs", companies.size());
+                    s.put("avgDocLength", (int) AVG_DOC_LENGTH);
+                    s.put("latestPostDate", latestPostDate);
+                    statsCache = Collections.unmodifiableMap(s);
+                }
+            }
+        }
+        return statsCache;
     }
 
     public static List<SearchResult> searchResults(String query, int topN) {

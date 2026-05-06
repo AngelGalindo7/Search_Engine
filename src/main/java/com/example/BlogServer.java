@@ -38,6 +38,8 @@ public class BlogServer {
     public static HttpServer start(int port) throws IOException {
         HttpServer server = HttpServer.create(new InetSocketAddress(port), 0);
         server.createContext("/search", BlogServer::handleSearch);
+        server.createContext("/top", BlogServer::handleTop);
+        server.createContext("/stats", BlogServer::handleStats);
         server.createContext("/health", BlogServer::handleHealth);
         server.createContext("/", BlogServer::handleStatic);
         server.setExecutor(Executors.newFixedThreadPool(4));
@@ -82,6 +84,31 @@ public class BlogServer {
         body.put("totalResults", results.size());
         body.put("results", results);
         sendJson(ex, 200, body);
+    }
+
+    static void handleTop(HttpExchange ex) throws IOException {
+        addCorsHeaders(ex);
+        if ("OPTIONS".equalsIgnoreCase(ex.getRequestMethod())) {
+            ex.sendResponseHeaders(204, -1);
+            ex.close();
+            return;
+        }
+        Map<String, String> params = parseQueryString(ex.getRequestURI());
+        int n = clampTop(parsePositiveInt(params.get("n"), DEFAULT_TOP));
+        List<SearchResult> results = BlogSearch.topByPageRank(n);
+        Map<String, Object> body = new LinkedHashMap<>();
+        body.put("results", results);
+        sendJson(ex, 200, body);
+    }
+
+    static void handleStats(HttpExchange ex) throws IOException {
+        addCorsHeaders(ex);
+        if ("OPTIONS".equalsIgnoreCase(ex.getRequestMethod())) {
+            ex.sendResponseHeaders(204, -1);
+            ex.close();
+            return;
+        }
+        sendJson(ex, 200, BlogSearch.stats());
     }
 
     static void handleStatic(HttpExchange ex) throws IOException {

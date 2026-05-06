@@ -106,6 +106,36 @@ class BlogServerIntegrationTest {
     }
 
     @Test
+    void statsReturnsCorpusSnapshot() throws Exception {
+        HttpResponse<String> resp = get("/stats");
+        assertEquals(200, resp.statusCode());
+        JsonObject body = JsonParser.parseString(resp.body()).getAsJsonObject();
+        assertTrue(body.get("totalDocs").getAsInt() > 0);
+        assertTrue(body.get("totalTokens").getAsInt() > 0);
+        assertTrue(body.get("totalBlogs").getAsInt() > 0);
+        assertNotNull(body.get("avgDocLength"));
+        assertNotNull(body.get("latestPostDate"));
+    }
+
+    @Test
+    void topReturnsPageRankSortedResults() throws Exception {
+        HttpResponse<String> resp = get("/top?n=5");
+        assertEquals(200, resp.statusCode());
+        JsonObject body = JsonParser.parseString(resp.body()).getAsJsonObject();
+        JsonArray results = body.getAsJsonArray("results");
+        assertEquals(5, results.size());
+        double prev = Double.POSITIVE_INFINITY;
+        for (int i = 0; i < results.size(); i++) {
+            JsonObject r = results.get(i).getAsJsonObject();
+            assertNotNull(r.get("title"));
+            assertNotNull(r.get("url"));
+            double score = r.get("score").getAsDouble();
+            assertTrue(score <= prev, "results should be sorted by score descending");
+            prev = score;
+        }
+    }
+
+    @Test
     void rootServesIndexHtml() throws Exception {
         HttpResponse<String> resp = get("/");
         assertEquals(200, resp.statusCode());
