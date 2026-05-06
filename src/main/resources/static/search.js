@@ -39,7 +39,7 @@
     hide(topLabel);
   }
 
-  function renderResults(items) {
+  function renderResults(items, showScore) {
     results.replaceChildren();
     const frag = document.createDocumentFragment();
     for (const r of items) {
@@ -69,13 +69,16 @@
       url.textContent = truncate(r.url, 80);
       main.appendChild(url);
 
-      const score = document.createElement('div');
-      score.className = 'result-score';
-      score.title = 'Relevance score';
-      score.textContent = typeof r.score === 'number' ? r.score.toFixed(3) : '';
-
       li.appendChild(main);
-      li.appendChild(score);
+
+      if (showScore && typeof r.score === 'number') {
+        const score = document.createElement('div');
+        score.className = 'result-score';
+        score.title = 'Relevance score';
+        score.textContent = r.score.toFixed(2);
+        li.appendChild(score);
+      }
+
       frag.appendChild(li);
     }
     results.appendChild(frag);
@@ -85,7 +88,7 @@
     if (!topResults || topResults.length === 0) return;
     hide(status); hide(error); hide(footer);
     show(topLabel);
-    renderResults(topResults);
+    renderResults(topResults, false);
   }
 
   async function loadStats() {
@@ -146,7 +149,7 @@
         show(status);
         return;
       }
-      renderResults(items);
+      renderResults(items, true);
       setText(footer, `${data.totalResults} results in ${data.tookMs}ms`);
       show(footer);
     } catch (e) {
