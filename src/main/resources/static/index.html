@@ -10,6 +10,7 @@
     <div class="app">
       <header class="header">
         <h1 class="title">Engineering Blog Search</h1>
+        <p class="stats-strip" id="stats-strip">loading corpus…</p>
         <form id="search-form" class="search-form" role="search" autocomplete="off">
           <input
             id="search-input"
@@ -22,12 +23,15 @@
         </form>
       </header>
       <main class="main">
-        <p id="hint" class="hint">Try queries like &laquo;rust async&raquo;, &laquo;kafka&raquo;, or &laquo;distributed tracing&raquo;.</p>
+        <p id="top-label" class="section-label" hidden>Most cited in our corpus</p>
         <p id="status" class="status" hidden></p>
         <p id="error" class="error" hidden></p>
         <ol id="results" class="results"></ol>
         <footer id="footer" class="footer" hidden></footer>
       </main>
+      <footer class="ranking-info">
+        corpus@v0.1 &middot; BM25(k1=1.2, b=0.75, &alpha;=0.5) &middot; domain-decay 0.85^k
+      </footer>
     </div>
     <script src="/static/search.js" defer></script>
   </body>

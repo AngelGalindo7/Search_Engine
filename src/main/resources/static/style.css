@@ -28,17 +28,29 @@ html, body {
 .app {
   max-width: 720px;
   margin: 0 auto;
-  padding: 48px 20px 96px;
+  padding: 48px 20px 32px;
+  display: flex;
+  flex-direction: column;
+  min-height: 100vh;
 }
 
-.header { margin-bottom: 32px; }
+.header { margin-bottom: 24px; }
 
 .title {
   font-size: 1.6em;
   font-weight: 600;
-  margin: 0 0 20px;
+  margin: 0 0 8px;
   text-align: center;
   letter-spacing: -0.01em;
+}
+
+.stats-strip {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 0.78rem;
+  color: var(--muted);
+  text-align: center;
+  margin: 0 0 24px;
+  letter-spacing: 0.01em;
 }
 
 .search-form { width: 100%; }
@@ -61,9 +73,21 @@ html, body {
   box-shadow: 0 0 0 3px rgba(79, 141, 247, 0.18);
 }
 
-.main { margin-top: 24px; }
+.main {
+  margin-top: 24px;
+  flex: 1;
+}
 
-.hint, .status {
+.section-label {
+  font-size: 0.78rem;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  margin: 8px 0 12px;
+  font-weight: 500;
+}
+
+.status {
   color: var(--meta);
   text-align: center;
   margin: 24px 0;
@@ -138,10 +162,23 @@ html, body {
   text-align: center;
 }
 
+.ranking-info {
+  margin-top: 48px;
+  padding-top: 16px;
+  border-top: 1px solid var(--border);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 0.72rem;
+  color: var(--muted);
+  text-align: center;
+  letter-spacing: 0.02em;
+}
+
 @media (max-width: 540px) {
-  .app { padding: 24px 14px 64px; }
+  .app { padding: 24px 14px 24px; }
   .title { font-size: 1.35em; }
+  .stats-strip { font-size: 0.72rem; }
   .search-input { font-size: 1em; padding: 14px; }
   .result { flex-direction: column; gap: 4px; }
   .result-score { align-self: flex-end; }
+  .ranking-info { font-size: 0.68rem; }
 }
