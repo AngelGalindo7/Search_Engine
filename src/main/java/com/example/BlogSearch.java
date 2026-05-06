@@ -87,11 +87,18 @@ public class BlogSearch {
         if (statsCache == null) {
             synchronized (BlogSearch.class) {
                 if (statsCache == null) {
+                    // Clamp postDate to today — some RSS feeds publish future-dated posts
+                    // (scheduled drafts, misconfigured CMS clocks). Showing them in the stats
+                    // strip looks like a bug to users.
+                    String today = java.time.LocalDate.now(java.time.ZoneOffset.UTC).toString();
                     Set<String> companies = new HashSet<>();
                     String latestPostDate = "";
                     for (BlogDocMeta m : docMetadata.values()) {
                         if (m.company != null && !m.company.isBlank()) companies.add(m.company);
-                        if (m.postDate != null && m.postDate.compareTo(latestPostDate) > 0) {
+                        if (m.postDate == null || m.postDate.isBlank()) continue;
+                        String dayPart = m.postDate.length() >= 10 ? m.postDate.substring(0, 10) : m.postDate;
+                        if (dayPart.compareTo(today) > 0) continue;
+                        if (m.postDate.compareTo(latestPostDate) > 0) {
                             latestPostDate = m.postDate;
                         }
                     }
