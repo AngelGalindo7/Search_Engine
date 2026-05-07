@@ -5,16 +5,16 @@ Single-JAR Java search engine. The 50 MB search index is hosted as a GitHub Rele
 ## Prerequisites
 - Code pushed to a GitHub repo
 - A Render account — sign in with GitHub at https://render.com
-- The three index files locally: `blog_index.bin`, `blog_doc_meta.txt`, `blog_token_meta.txt`
+- The four index files locally: `blog_index.bin`, `blog_doc_meta.txt`, `blog_token_meta.txt`, `blog_embeddings.bin`
 - Optional: GitHub CLI (`gh`) — alternative is the GitHub web UI
 
 ## Step 1 — Upload the index as a GitHub Release
 
 ```bash
 gh release create v0.1 \
-  blog_index.bin blog_doc_meta.txt blog_token_meta.txt \
+  blog_index.bin blog_doc_meta.txt blog_token_meta.txt blog_embeddings.bin \
   --title "Search index v0.1" \
-  --notes "Inverted index, doc metadata, token metadata for the engineering blog corpus."
+  --notes "Inverted index, doc metadata, token metadata, dense embeddings for the engineering blog corpus."
 ```
 
 Asset URLs follow the pattern:
@@ -22,6 +22,7 @@ Asset URLs follow the pattern:
 https://github.com/<USER>/<REPO>/releases/download/v0.1/blog_index.bin
 https://github.com/<USER>/<REPO>/releases/download/v0.1/blog_doc_meta.txt
 https://github.com/<USER>/<REPO>/releases/download/v0.1/blog_token_meta.txt
+https://github.com/<USER>/<REPO>/releases/download/v0.1/blog_embeddings.bin
 ```
 
 (Without `gh`: GitHub web UI → Releases → Draft a new release → attach the three files → Publish.)
@@ -43,6 +44,7 @@ Render dropped the native Java runtime; we use the **Docker** runtime via the `D
 4. Click **Advanced** → **Add Environment Variable**:
    - Key: `INDEX_RELEASE_URL`
    - Value: `https://github.com/<USER>/<REPO>/releases/download/v0.1`
+   - (Optional, dense rerank) Key: `JAVA_TOOL_OPTIONS`, Value: `-Dsearch.reranker=dense`. The JVM picks this up automatically; flips on cosine rerank of the BM25 top-100 using `blog_embeddings.bin`. Skip this var to stay on plain BM25+PageRank.
 
 5. Click **Create Web Service**.
 
@@ -60,9 +62,13 @@ Bootstrapping blog_doc_meta.txt from https://github.com/...
   -> 1500000 bytes
 Bootstrapping blog_token_meta.txt from https://github.com/...
   -> 3000000 bytes
+Bootstrapping blog_embeddings.bin from https://github.com/...
+  -> 21000000 bytes
 Loaded 181799 tokens, 11196 docs, avg length 1696
 Listening on http://localhost:10000
 ```
+
+If `JAVA_TOOL_OPTIONS=-Dsearch.reranker=dense` is set, the first `/search` request triggers a one-time ~330 MB download of PyTorch native libs into `~/.djl.ai/` inside the container. Expect a 10–30 s cold-start latency on that first query; subsequent queries embed in ~50 ms.
 
 Render reports `Live`. Visit `https://engineering-blog-search.onrender.com` — the all-Java UI loads, search works.
 
@@ -84,6 +90,15 @@ Whenever you re-crawl and re-index:
 1. Cut a new GitHub Release (e.g. `v0.2`) with the fresh `blog_*.{bin,txt}` files.
 2. In Render → service → Environment → bump `INDEX_RELEASE_URL` to the new release URL.
 3. Manually deploy. The bootstrap detects the existing files are stale (you'd need to delete them first or change filenames) — alternative: Render gives each deploy a fresh filesystem on the free tier, so a redeploy is enough.
+
+## Memory caveat for dense rerank
+
+The free Render tier is 512 MB RAM. Plain BM25+PageRank fits comfortably under the `-Xmx384m` heap in the Dockerfile. Dense rerank loads ~250 MB of PyTorch native libs (off-heap, but charged against the container's RAM cap) plus the ~80 MB embedding model into memory — combined with the JVM heap, you are within tens of MB of the limit. Symptoms of running over: container is killed mid-query with no Java exception, Render dashboard shows `Out of memory`, service flips to `Deploy failed` after a few restarts.
+
+Mitigations if it OOMs:
+- Lower `-Xmx384m` to `-Xmx256m` in the Dockerfile (the index is mostly mmap'd, smaller heap is fine).
+- Drop dense rerank in production (unset `JAVA_TOOL_OPTIONS`). The eval delta vs. BM25+PR is small at 13 K docs.
+- Upgrade Render to the Starter plan for more headroom.
 
 ## Why no Vercel?
 
