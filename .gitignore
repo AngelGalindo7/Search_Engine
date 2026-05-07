@@ -22,6 +22,15 @@ Thumbs.db
 .env.*
 !.env.example
 
+eval/.venv/
+eval/results.json
+eval/metrics.json
+eval/manifest.json
+eval/crawl_manifest.json
+eval/index_manifest.json
+eval/pagerank_manifest.json
+eval/runs/
+
 CLAUDE.md
 PROJECT_MAP.md
 docs/
