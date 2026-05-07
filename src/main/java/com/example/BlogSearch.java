@@ -28,6 +28,7 @@ public class BlogSearch {
     public static final double B = 0.75;
     public static final double DOMAIN_DECAY = 0.85;
     public static final double AUTHOR_BOOST = 3.0;
+    public static final int    BIGRAM_MIN_DF = 3;
 
     // Known author name (lowercase) → registrable domain for query-time domain boost.
     private static final Map<String, String> AUTHOR_DOMAINS = Map.of(
@@ -222,6 +223,9 @@ public class BlogSearch {
             String token = entry.getKey();
             TokenMeta tm = tokenMetadata.get(token);
             if (tm == null) continue;
+            // Skip rare bigrams: their max-IDF dominates BM25 and surfaces marginal docs
+            // (one matching phrase in a heading) over docs with strong unigram coverage.
+            if (token.indexOf(' ') >= 0 && tm.df < BIGRAM_MIN_DF) continue;
             int df = tm.df;
             // Buggy: the +0.5 ended up added to the quotient, not the denominator.
             // double idf = Math.log(((TOTAL_DOCS - df + 0.5) / df + 0.5) + 1);
