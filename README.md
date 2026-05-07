@@ -1,6 +1,6 @@
 # Engineering Blog Search
 
-Search engine over **13,594 posts** from **446 engineering blogs** (Stripe, Cloudflare, Netflix, Discord, Datadog, Uber, brooker.co.za, danluu.com, jvns.ca, etc). Java backend, custom binary inverted index, BM25 + PageRank, plus a dense reranker. Crawler is hardened against XXE and SSRF.
+Search engine over **13,594 posts** from **446 engineering blogs** (Stripe, Cloudflare, Netflix, Discord, Datadog, Uber, brooker.co.za, danluu.com, jvns.ca, etc). Built end-to-end in **Java 17** — custom binary inverted index, **BM25 + PageRank** ranking, and a **dense reranker** using **MiniLM** sentence embeddings. Search quality is measured with an **LLM-as-a-judge** eval harness powered by **OpenAI gpt-4o-mini**.
 
 **Live:** [engineering-blog-search.onrender.com](https://engineering-blog-search.onrender.com/)
 
@@ -8,9 +8,13 @@ Search engine over **13,594 posts** from **446 engineering blogs** (Stripe, Clou
 
 ## Search quality
 
-44 queries across 6 categories, plus 2 negative off-corpus probes. `gpt-4o-mini` judges each top-10 result 0–3 against a rubric I wrote ahead of the run. Metrics: NDCG@10, MRR, P@5, P@10. Judgments are cached in `eval/qrels.json` so re-runs only score new docs.
+I built an **LLM-as-a-judge** eval harness on top of the backend: **44 hand-written queries** across 6 categories (plus 2 negative off-corpus probes), and **OpenAI `gpt-4o-mini`** scores every top-10 result 0–3 against a per-query rubric. Results are aggregated with the standard IR metrics:
 
-![NDCG@10 by category](eval/metrics.png)
+- **NDCG@10** — *Normalized Discounted Cumulative Gain*. Measures how well-ordered the top 10 results are; 1.0 means the highest-relevance docs are at the top.
+- **MRR** — *Mean Reciprocal Rank*. How high the first relevant result lands; 1.0 means it's always at position 1.
+- **P@5** — *Precision at 5*. Fraction of the top 5 results that are relevant.
+
+Judgments are cached in `eval/qrels.json` so a full re-eval after a tuning change costs cents, not dollars. The full chart, per-query results, and per-run archives live in `eval/` (rendered chart at `eval/metrics.png`, per-run snapshots in `eval/runs/<stamp>/`).
 
 | Category | n | NDCG@10 |
 |---|---:|---:|
@@ -76,11 +80,11 @@ There's a second pipeline (`Indexer` / `PageRank` / `Search` over the UCI ICS co
 
 | Layer | Tech |
 |---|---|
-| Language | Java 17, Maven |
+| Language | **Java 17**, Maven |
 | Backend | Jsoup (HTML), Rome (RSS/Atom), OpenNLP + Snowball (tokenize/stem), custom binary inverted index |
 | Frontend | HTML/JS served from the JVM |
-| Ranking | BM25 + PageRank + tag mask + author boost + bigrams + synonyms + recency + diversification, then dense rerank with `all-MiniLM-L6-v2` via DJL |
-| Eval | Python, OpenAI `gpt-4o-mini` as judge, matplotlib |
+| Ranking | **BM25 + PageRank** + tag mask + author boost + bigrams + synonyms + recency + diversification, then **dense rerank** with **`all-MiniLM-L6-v2`** via **DJL** |
+| Eval | Python, **OpenAI `gpt-4o-mini`** as judge, matplotlib |
 
 ---
 
