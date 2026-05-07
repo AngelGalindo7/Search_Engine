@@ -142,6 +142,61 @@ public class BlogSearch {
         Files.createDirectories(Path.of("eval"));
         Files.writeString(Path.of("eval/results.json"), gson.toJson(output));
         System.out.println("Written eval/results.json (" + queries.size() + " queries)");
+
+        writeManifest(gson, queries.size());
+    }
+
+    // Captures the configuration that produced this run so archived runs are self-describing.
+    // Without this, a metric delta between runs is impossible to attribute to a specific change.
+    private static void writeManifest(Gson gson, int queryCount) throws IOException {
+        JsonObject m = new JsonObject();
+        m.addProperty("timestamp", java.time.Instant.now().toString());
+        m.addProperty("query_count", queryCount);
+
+        JsonObject git = new JsonObject();
+        git.addProperty("commit", runGit("rev-parse", "HEAD"));
+        git.addProperty("branch", runGit("rev-parse", "--abbrev-ref", "HEAD"));
+        git.addProperty("dirty",  !runGit("status", "--porcelain").isEmpty());
+        m.add("git", git);
+
+        JsonObject index = new JsonObject();
+        index.addProperty("total_docs",     TOTAL_DOCS);
+        index.addProperty("total_tokens",   tokenMetadata.size());
+        index.addProperty("avg_doc_length", (int) AVG_DOC_LENGTH);
+        m.add("index", index);
+
+        JsonObject ranking = new JsonObject();
+        ranking.addProperty("ALPHA",         ALPHA);
+        ranking.addProperty("SCALE",         SCALE);
+        ranking.addProperty("K1",            K1);
+        ranking.addProperty("B",             B);
+        ranking.addProperty("DOMAIN_DECAY",  DOMAIN_DECAY);
+        ranking.addProperty("AUTHOR_BOOST",  AUTHOR_BOOST);
+        ranking.addProperty("BIGRAM_MIN_DF", BIGRAM_MIN_DF);
+        m.add("ranking", ranking);
+
+        JsonObject features = new JsonObject();
+        features.addProperty("synonym_pairs",  SYNONYM_PAIRS.length);
+        features.addProperty("author_domains", AUTHOR_DOMAINS.size());
+        features.addProperty("bigrams",        "all-tags");  // matches BlogIndexer scope
+        m.add("features", features);
+
+        Files.writeString(Path.of("eval/manifest.json"), gson.toJson(m));
+        System.out.println("Written eval/manifest.json");
+    }
+
+    private static String runGit(String... args) {
+        try {
+            List<String> cmd = new ArrayList<>();
+            cmd.add("git");
+            for (String a : args) cmd.add(a);
+            Process p = new ProcessBuilder(cmd).redirectErrorStream(true).start();
+            String out = new String(p.getInputStream().readAllBytes()).trim();
+            p.waitFor();
+            return out;
+        } catch (Exception e) {
+            return "unknown";
+        }
     }
 
     public static void loadDependencies() {
