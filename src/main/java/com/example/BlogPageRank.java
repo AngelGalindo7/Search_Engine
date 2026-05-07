@@ -29,8 +29,12 @@ public class BlogPageRank {
     private static Map<Integer, Double> pageRank = new HashMap<>();
     private static Map<String, Integer> urlToId = new HashMap<>();
     private static Map<Integer, BlogDocMeta> docMetadata;
+    private static long intraDomainSkipped = 0;
+    private static int iterationsRun = 0;
+    private static boolean converged = false;
 
     public static void main(String[] args) {
+        long startMs = System.currentTimeMillis();
         docMetadata = BlogIndexer.readBlogDocMetadata();
         if (docMetadata.isEmpty()) {
             System.err.println("blog_doc_meta.txt is empty or missing — run BlogIndexer first.");
@@ -45,6 +49,42 @@ public class BlogPageRank {
         printPageRank();
         updateDocMetadata();
         saveMetadataToFile();
+
+        long durationSec = (System.currentTimeMillis() - startMs) / 1000;
+        writePageRankManifest(durationSec);
+    }
+
+    private static void writePageRankManifest(long durationSec) {
+        try {
+            int totalEdges = 0, sinks = 0;
+            for (Integer id : urlToId.values()) {
+                Set<Integer> out = outgoing.get(id);
+                if (out == null || out.isEmpty()) sinks++;
+                else totalEdges += out.size();
+            }
+            int N = urlToId.size();
+
+            com.google.gson.JsonObject m = new com.google.gson.JsonObject();
+            m.addProperty("timestamp", java.time.Instant.now().toString());
+            m.addProperty("duration_sec", durationSec);
+            m.addProperty("damping", DAMPING);
+            m.addProperty("epsilon", EPSILON);
+            m.addProperty("max_iter", MAX_ITER);
+            m.addProperty("iterations_run", iterationsRun);
+            m.addProperty("converged", converged);
+            m.addProperty("nodes", N);
+            m.addProperty("edges", totalEdges);
+            m.addProperty("sinks", sinks);
+            m.addProperty("intra_domain_edges_filtered", intraDomainSkipped);
+            m.addProperty("mean_out_degree", N == 0 ? 0.0 : (double) totalEdges / N);
+
+            java.nio.file.Files.createDirectories(java.nio.file.Path.of("eval"));
+            java.nio.file.Files.writeString(java.nio.file.Path.of("eval/pagerank_manifest.json"),
+                    new com.google.gson.GsonBuilder().setPrettyPrinting().create().toJson(m));
+            System.out.println("Written eval/pagerank_manifest.json");
+        } catch (Exception e) {
+            System.err.println("pagerank manifest write failed: " + e.getMessage());
+        }
     }
 
     public static void setupUrlMapping() {
@@ -67,8 +107,7 @@ public class BlogPageRank {
         List<String> paths = Parser.parseDirectory("BLOGS");
         if (paths == null) return;
 
-        long intraDomainSkipped = 0;
-
+        // long intraDomainSkipped = 0;   // promoted to class field for pagerank_manifest.json
         for (String filePath : paths) {
             try (Reader reader = new FileReader(filePath)) {
                 Map<String, String> jsonMap = gson.fromJson(reader, Map.class);
@@ -165,7 +204,9 @@ public class BlogPageRank {
             }
 
             pageRank = nextRank;
+            iterationsRun = iter + 1;
             if (diff < EPSILON) {
+                converged = true;
                 System.out.println("Converged after " + (iter + 1) + " iterations");
                 break;
             }
