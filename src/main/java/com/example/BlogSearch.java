@@ -30,6 +30,14 @@ public class BlogSearch {
     public static final double AUTHOR_BOOST = 3.0;
     public static final int    BIGRAM_MIN_DF = 2;
 
+    // Dense reranker: opt-in via -Dsearch.reranker=dense. Default "off" preserves the
+    // BM25 + tag-mask + PageRank + diversification baseline. When on, the top
+    // RERANK_CANDIDATES from the lexical pipeline are re-sorted by cosine(query, doc)
+    // using L2-normalized embeddings from blog_embeddings.bin.
+    public static final String RERANKER_MODE = System.getProperty("search.reranker", "off");
+    public static final int    RERANK_CANDIDATES = 100;
+    private static volatile float[][] docEmbeddingsCache;
+
     // Known author name (lowercase) → registrable domain for query-time domain boost.
     private static final Map<String, String> AUTHOR_DOMAINS = Map.of(
         "dan luu",       "danluu.com",
@@ -173,6 +181,12 @@ public class BlogSearch {
         ranking.addProperty("DOMAIN_DECAY",  DOMAIN_DECAY);
         ranking.addProperty("AUTHOR_BOOST",  AUTHOR_BOOST);
         ranking.addProperty("BIGRAM_MIN_DF", BIGRAM_MIN_DF);
+        ranking.addProperty("RERANKER_MODE", RERANKER_MODE);
+        if ("dense".equals(RERANKER_MODE)) {
+            ranking.addProperty("RERANK_CANDIDATES", RERANK_CANDIDATES);
+            ranking.addProperty("RERANK_MODEL",      BlogReranker.MODEL_URL);
+            ranking.addProperty("RERANK_DIM",        BlogReranker.EMBEDDING_DIM);
+        }
         m.add("ranking", ranking);
 
         JsonObject features = new JsonObject();
@@ -181,8 +195,24 @@ public class BlogSearch {
         features.addProperty("bigrams",        "all-tags");  // matches BlogIndexer scope
         m.add("features", features);
 
+        // Merge in the per-component sub-manifests written by Crawler / BlogIndexer / BlogPageRank.
+        // Missing files degrade silently so eval can still run if a component wasn't re-executed.
+        mergeSubManifest(m, "crawl",    Path.of("eval/crawl_manifest.json"));
+        mergeSubManifest(m, "indexer",  Path.of("eval/index_manifest.json"));
+        mergeSubManifest(m, "pagerank", Path.of("eval/pagerank_manifest.json"));
+
         Files.writeString(Path.of("eval/manifest.json"), gson.toJson(m));
         System.out.println("Written eval/manifest.json");
+    }
+
+    private static void mergeSubManifest(JsonObject root, String key, Path file) {
+        try {
+            if (!Files.exists(file)) return;
+            JsonElement parsed = JsonParser.parseString(Files.readString(file));
+            root.add(key, parsed);
+        } catch (Exception e) {
+            System.err.println("merge " + file + " failed: " + e.getMessage());
+        }
     }
 
     private static String runGit(String... args) {
@@ -334,6 +364,13 @@ public class BlogSearch {
         }
         ranked.sort(Comparator.comparing(diversifiedRank::get).reversed());
 
+        // Dense rerank: re-sort the top-K prefix of `ranked` by cosine(query, doc).
+        // The tail (positions K..end) keeps its BM25-order, which only matters for
+        // queries with > K candidates -- those tail docs aren't visible at top-N.
+        if ("dense".equals(RERANKER_MODE)) {
+            denseRerank(query, ranked, diversifiedRank);
+        }
+
         int top = Math.min(topN, ranked.size());
         List<SearchResult> out = new ArrayList<>(top);
         for (int i = 0; i < top; i++) {
@@ -414,6 +451,71 @@ public class BlogSearch {
         if ((tagMask & Tag.EMPHASIS.bit) != 0) return 1.5;
         if ((tagMask & Tag.BODY.bit) != 0) return 1.0;
         return 1.0;
+    }
+
+    // Mutates `ranked` in place: the first min(K, size) entries are re-sorted by
+    // cosine similarity. `diversifiedRank` is updated for those entries so the
+    // SearchResult.score returned to the caller reflects the cosine value.
+    private static void denseRerank(String query, List<Integer> ranked,
+                                     Map<Integer, Double> diversifiedRank) {
+        float[][] docEmb = loadDocEmbeddings();
+        if (docEmb.length == 0) return;
+
+        float[] queryEmb;
+        try {
+            queryEmb = BlogReranker.embed(query);
+        } catch (Exception e) {
+            System.err.println("dense rerank: query embed failed: " + e.getMessage());
+            return;
+        }
+
+        int k = Math.min(RERANK_CANDIDATES, ranked.size());
+        List<Integer> head = ranked.subList(0, k);
+        Map<Integer, Double> rerank = new HashMap<>(k);
+        for (int docId : head) {
+            // docs without an embedding (zero vector or out of range) get cosine 0
+            // and sink to the bottom of the K-prefix without special-casing.
+            double cos = (docId < docEmb.length)
+                    ? BlogReranker.cosine(queryEmb, docEmb[docId])
+                    : 0.0;
+            rerank.put(docId, cos);
+        }
+        head.sort(Comparator.comparing(rerank::get).reversed());
+        for (int docId : head) diversifiedRank.put(docId, rerank.get(docId));
+    }
+
+    private static float[][] loadDocEmbeddings() {
+        if (docEmbeddingsCache != null) return docEmbeddingsCache;
+        synchronized (BlogSearch.class) {
+            if (docEmbeddingsCache != null) return docEmbeddingsCache;
+            Path path = Path.of("blog_embeddings.bin");
+            if (!Files.exists(path)) {
+                System.err.println("WARN: blog_embeddings.bin not found; dense rerank is a no-op");
+                docEmbeddingsCache = new float[0][];
+                return docEmbeddingsCache;
+            }
+            try (FileChannel ch = FileChannel.open(path, StandardOpenOption.READ)) {
+                ByteBuffer header = ByteBuffer.allocate(8);
+                while (header.hasRemaining()) if (ch.read(header) < 0) break;
+                header.flip();
+                int n = header.getInt();
+                int dim = header.getInt();
+                float[][] mat = new float[n][dim];
+                ByteBuffer row = ByteBuffer.allocate(dim * 4);
+                for (int i = 0; i < n; i++) {
+                    row.clear();
+                    while (row.hasRemaining()) if (ch.read(row) < 0) break;
+                    row.flip();
+                    for (int j = 0; j < dim; j++) mat[i][j] = row.getFloat();
+                }
+                docEmbeddingsCache = mat;
+                System.out.printf("Loaded %d × %d embeddings from blog_embeddings.bin%n", n, dim);
+            } catch (IOException e) {
+                e.printStackTrace();
+                docEmbeddingsCache = new float[0][];
+            }
+            return docEmbeddingsCache;
+        }
     }
 
     public static List<Posting> getTokenPostings(String token) {
