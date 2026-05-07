@@ -367,11 +367,20 @@ public class BlogSearch {
         List<Posting> postings = new ArrayList<>(df);
         try (FileChannel channel = FileChannel.open(Path.of("blog_index.bin"), StandardOpenOption.READ)) {
             ByteBuffer buf = ByteBuffer.allocate(length);
-            channel.read(buf, offset);
+            // FileChannel.read is not guaranteed to fill the buffer in one call;
+            // loop until full or EOF to guard against partial reads and index/metadata skew.
+            long pos = offset;
+            while (buf.hasRemaining()) {
+                int n = channel.read(buf, pos);
+                if (n <= 0) break;
+                pos += n;
+            }
             buf.flip();
-            for (int i = 0; i < df; i++) {
-                int docId = buf.getInt();
-                int tf = buf.getInt();
+            // read only complete postings — silently skips trailing partial bytes
+            // that result from a stale token_meta pointing into a mismatched index file.
+            while (buf.remaining() >= 12) {
+                int docId   = buf.getInt();
+                int tf      = buf.getInt();
                 int tagMask = buf.getInt();
                 postings.add(new Posting(docId, tf, tagMask));
             }
