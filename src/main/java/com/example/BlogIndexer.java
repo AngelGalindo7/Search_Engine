@@ -209,6 +209,13 @@ public class BlogIndexer {
                 tr.tf += 1;
                 tr.tagMask |= tag.bit;
             }
+            // Bigrams let compound-noun queries ("write-ahead logging", "circuit breaker")
+            // beat unigram noise from high-DF tokens like "write", "log", "break".
+            for (String bigram : Tokenizer.getNGrams(tokens, 2)) {
+                TokenResult tr = tokenMap.computeIfAbsent(bigram, k -> new TokenResult());
+                tr.tf += 1;
+                tr.tagMask |= tag.bit;
+            }
         }
 
         for (Map.Entry<String, TokenResult> entry : tokenMap.entrySet()) {
