@@ -18,6 +18,7 @@ public final class IndexBootstrap {
             "blog_index.bin",
             "blog_doc_meta.txt",
             "blog_token_meta.txt",
+            "blog_embeddings.bin",
     };
 
     private IndexBootstrap() {}
