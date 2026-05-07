@@ -478,6 +478,12 @@
       <outline type="rss" text="Marc Brooker" title="Marc Brooker" xmlUrl="https://brooker.co.za/blog/rss.xml" htmlUrl="https://brooker.co.za/blog"/>
       <outline type="rss" text="Jeff Geerling" title="Jeff Geerling" xmlUrl="https://jeffgeerling.com/blog.xml" htmlUrl="https://jeffgeerling.com"/>
       <outline type="rss" text="Raspberry Pi" title="Raspberry Pi" xmlUrl="https://raspberrypi.com/news/feed/" htmlUrl="https://raspberrypi.com/news"/>
+      <outline type="rss" text="Google Research" title="Google Research" xmlUrl="https://research.google/blog/rss/" htmlUrl="https://research.google/blog"/>
+      <outline type="rss" text="DeepMind" title="DeepMind" xmlUrl="https://deepmind.google/blog/rss.xml" htmlUrl="https://deepmind.google/blog"/>
+      <outline type="rss" text="OpenAI" title="OpenAI" xmlUrl="https://openai.com/news/rss.xml" htmlUrl="https://openai.com/news"/>
+      <outline type="rss" text="Apple Machine Learning Research" title="Apple Machine Learning Research" xmlUrl="https://machinelearning.apple.com/rss.xml" htmlUrl="https://machinelearning.apple.com"/>
+      <outline type="rss" text="Vercel" title="Vercel" xmlUrl="https://vercel.com/atom" htmlUrl="https://vercel.com/blog"/>
+      <outline type="rss" text="Kubernetes" title="Kubernetes" xmlUrl="https://kubernetes.io/feed.xml" htmlUrl="https://kubernetes.io/blog"/>
     </outline>
   </body>
 </opml>
