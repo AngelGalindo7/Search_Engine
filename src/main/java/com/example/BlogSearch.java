@@ -1,9 +1,16 @@
 package com.example;
 
+import com.google.gson.Gson;
+import com.google.gson.GsonBuilder;
+import com.google.gson.JsonArray;
+import com.google.gson.JsonElement;
+import com.google.gson.JsonObject;
+import com.google.gson.JsonParser;
 import java.io.IOException;
 import java.net.URI;
 import java.nio.ByteBuffer;
 import java.nio.channels.FileChannel;
+import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardOpenOption;
 import java.util.*;
@@ -20,6 +27,29 @@ public class BlogSearch {
     public static final double K1 = 1.2;
     public static final double B = 0.75;
     public static final double DOMAIN_DECAY = 0.85;
+    public static final double AUTHOR_BOOST = 3.0;
+
+    // Known author name (lowercase) → registrable domain for query-time domain boost.
+    private static final Map<String, String> AUTHOR_DOMAINS = Map.of(
+        "dan luu",       "danluu.com",
+        "julia evans",   "jvns.ca",
+        "marc brooker",  "brooker.co.za",
+        "martin fowler", "martinfowler.com",
+        "brendan gregg", "brendangregg.com",
+        "will larson",   "lethain.com",
+        "alex russell",  "infrequently.org"
+    );
+
+    // Bidirectional acronym↔expansion pairs; all lowercase, expansion space-separated.
+    private static final String[][] SYNONYM_PAIRS = {
+        {"wal",  "write ahead logging"},
+        {"gil",  "global interpreter lock"},
+        {"jvm",  "java virtual machine"},
+        {"jit",  "just in time"},
+        {"gc",   "garbage collection"},
+        {"oom",  "out of memory"},
+        {"stw",  "stop the world"},
+    };
 
     private static volatile List<SearchResult> topByPageRankCache;
     private static volatile Map<String, Object> statsCache;
@@ -38,6 +68,18 @@ public class BlogSearch {
     };
 
     public static void main(String[] args) {
+        if ("eval".equals(System.getProperty("search.mode"))) {
+            loadDependencies();
+            System.out.printf("Loaded %d tokens, %d docs, avg doc length %.0f%n",
+                    tokenMetadata.size(), TOTAL_DOCS, AVG_DOC_LENGTH);
+            try {
+                runEval();
+            } catch (IOException e) {
+                System.err.println("eval failed: " + e.getMessage());
+            }
+            return;
+        }
+
         loadDependencies();
         System.out.printf("Loaded %d tokens, %d docs, avg doc length %.0f%n",
                 tokenMetadata.size(), TOTAL_DOCS, AVG_DOC_LENGTH);
@@ -53,6 +95,52 @@ public class BlogSearch {
             long end = System.nanoTime();
             System.out.printf("(%d ms)%n", (end - start) / 1_000_000);
         }
+    }
+
+    // Reads eval/queries.json, runs every query, writes eval/results.json.
+    // One JVM session for all queries — no repeated Maven startup overhead.
+    private static void runEval() throws IOException {
+        Path queriesPath = Path.of("eval/queries.json");
+        if (!Files.exists(queriesPath)) {
+            System.err.println("eval/queries.json not found");
+            return;
+        }
+
+        Gson gson = new GsonBuilder().setPrettyPrinting().create();
+        JsonArray queries = JsonParser.parseString(Files.readString(queriesPath)).getAsJsonArray();
+        JsonArray output = new JsonArray();
+
+        for (JsonElement el : queries) {
+            JsonObject q = el.getAsJsonObject();
+            String queryText = q.get("query").getAsString();
+            String category  = q.has("category") ? q.get("category").getAsString() : "";
+
+            List<SearchResult> hits = searchResults(queryText, 10);
+
+            JsonObject entry = new JsonObject();
+            entry.addProperty("query", queryText);
+            entry.addProperty("category", category);
+
+            JsonArray resultsArr = new JsonArray();
+            for (int i = 0; i < hits.size(); i++) {
+                SearchResult r = hits.get(i);
+                JsonObject hit = new JsonObject();
+                hit.addProperty("rank", i + 1);
+                hit.addProperty("score", r.score);
+                hit.addProperty("title", r.title);
+                hit.addProperty("company", r.company);
+                hit.addProperty("url", r.url);
+                resultsArr.add(hit);
+            }
+            entry.add("results", resultsArr);
+            output.add(entry);
+
+            System.out.printf("[eval] %-45s -> %d hits%n", queryText, hits.size());
+        }
+
+        Files.createDirectories(Path.of("eval"));
+        Files.writeString(Path.of("eval/results.json"), gson.toJson(output));
+        System.out.println("Written eval/results.json (" + queries.size() + " queries)");
     }
 
     public static void loadDependencies() {
@@ -118,7 +206,11 @@ public class BlogSearch {
     public static List<SearchResult> searchResults(String query, int topN) {
         if (query == null || query.isBlank()) return Collections.emptyList();
 
-        List<String> queryTokens = Tokenizer.tokenize(query);
+        // Expand acronyms bidirectionally, then add bigrams so compound-noun
+        // queries ("write-ahead logging") can match phrase tokens in the index.
+        // List<String> queryTokens = Tokenizer.tokenize(query);
+        List<String> queryTokens = new ArrayList<>(Tokenizer.tokenize(expandSynonyms(query)));
+        queryTokens.addAll(Tokenizer.getNGrams(new ArrayList<>(queryTokens), 2));
         Map<String, List<Posting>> queryIndex = new HashMap<>();
         for (String token : queryTokens) {
             List<Posting> postings = getTokenPostings(token);
@@ -152,6 +244,16 @@ public class BlogSearch {
 
                 docRank.merge(p.docId, finalScore, Double::sum);
             }
+        }
+
+        // Lift scores for posts from a known author's domain when their name appears in the query.
+        String authorDomain = detectAuthorDomain(query);
+        if (authorDomain != null) {
+            String ad = authorDomain;
+            docRank.replaceAll((id, score) -> {
+                BlogDocMeta m = docMetadata.get(id);
+                return m != null && registrableDomain(m.url).equals(ad) ? score * AUTHOR_BOOST : score;
+            });
         }
 
         if (docRank.isEmpty()) return Collections.emptyList();
@@ -208,6 +310,42 @@ public class BlogSearch {
         } catch (Exception e) {
             return "";
         }
+    }
+
+    // True when word appears at a word boundary (not inside a longer alphanumeric run).
+    private static boolean containsWord(String text, String word) {
+        int i = text.indexOf(word);
+        while (i >= 0) {
+            boolean before = i == 0 || !Character.isLetterOrDigit(text.charAt(i - 1));
+            boolean after  = i + word.length() == text.length()
+                             || !Character.isLetterOrDigit(text.charAt(i + word.length()));
+            if (before && after) return true;
+            i = text.indexOf(word, i + 1);
+        }
+        return false;
+    }
+
+    // Append the counterpart form (acronym or expansion) when only one side is present.
+    private static String expandSynonyms(String query) {
+        String lower = query.toLowerCase();
+        StringBuilder extra = new StringBuilder();
+        for (String[] pair : SYNONYM_PAIRS) {
+            String abbr = pair[0], full = pair[1];
+            boolean hasAbbr = containsWord(lower, abbr);
+            boolean hasFull = lower.contains(full);
+            if (hasAbbr && !hasFull) extra.append(" ").append(full);
+            else if (hasFull && !hasAbbr) extra.append(" ").append(abbr);
+        }
+        return extra.length() == 0 ? query : query + extra;
+    }
+
+    // Returns the registrable domain to boost if the query names a known author, else null.
+    private static String detectAuthorDomain(String query) {
+        String lower = query.toLowerCase();
+        for (Map.Entry<String, String> e : AUTHOR_DOMAINS.entrySet()) {
+            if (lower.contains(e.getKey())) return e.getValue();
+        }
+        return null;
     }
 
     public static double getTagMultiplier(int tagMask) {
