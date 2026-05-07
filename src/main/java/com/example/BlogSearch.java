@@ -28,7 +28,7 @@ public class BlogSearch {
     public static final double B = 0.75;
     public static final double DOMAIN_DECAY = 0.85;
     public static final double AUTHOR_BOOST = 3.0;
-    public static final int    BIGRAM_MIN_DF = 3;
+    public static final int    BIGRAM_MIN_DF = 2;
 
     // Known author name (lowercase) → registrable domain for query-time domain boost.
     private static final Map<String, String> AUTHOR_DOMAINS = Map.of(
