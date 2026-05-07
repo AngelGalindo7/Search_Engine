@@ -28,6 +28,17 @@ import java.util.*;
 public class BlogIndexer {
 
     static int docId = 0;
+    static int filesScanned = 0;
+    static int dupUrlSkipped = 0;
+    static String bigramStrategy = "all-tags";
+
+    // Dense-embedding state. Populated inline during indexDocument when the model
+    // is reachable; left empty (and embeddings file skipped) on model-load failure
+    // so the BM25 index alone is still buildable on a flaky-network machine.
+    static boolean embedAvailable = false;
+    static int embeddingsFailed = 0;
+    static int embeddingTextCharCap = 2000;       // ~256 tokens after HF tokenizer
+    static Map<Integer, float[]> docEmbeddings = new HashMap<>();
 
     static Map<String, List<Posting>> invertedIndex = new HashMap<>();
     static Map<Integer, BlogDocMeta> docMetadata = new HashMap<>();
@@ -35,6 +46,21 @@ public class BlogIndexer {
     static Set<String> seenUrls = new HashSet<>();
 
     public static void main(String[] args) {
+        long startMs = System.currentTimeMillis();
+
+        // Eagerly load the embedding model so a missing/cold model surfaces at
+        // start of run, not after we've already paid the indexing cost. On
+        // failure we set embedAvailable=false and continue BM25-only.
+        try {
+            BlogReranker.load();
+            embedAvailable = true;
+            System.out.println("Embedding model loaded.");
+        } catch (Exception e) {
+            embedAvailable = false;
+            System.err.println("WARN: embedding model unavailable, skipping blog_embeddings.bin: "
+                    + e.getMessage());
+        }
+
         indexDirectory();
         System.out.println("FINISHED indexing " + docId + " documents");
         System.out.println("Size of invertedIndex " + invertedIndex.size());
@@ -42,10 +68,15 @@ public class BlogIndexer {
         List<Posting> probePostings = invertedIndex.get(probe);
         System.out.println("Size of \"" + probe + "\" postings " + (probePostings == null ? 0 : probePostings.size()));
         System.out.println("Size of docMetadata " + docMetadata.size());
+        if (embedAvailable) {
+            System.out.println("Embeddings produced: " + docEmbeddings.size()
+                    + " (failed: " + embeddingsFailed + ")");
+        }
 
         writeBlogIndex();
         writeBlogDocMetadata();
         writeBlogTokenMetadata();
+        if (embedAvailable) writeBlogEmbeddings();
 
         Map<Integer, BlogDocMeta> doctest = readBlogDocMetadata();
         System.out.println("SIZE :" + doctest.size());
@@ -54,6 +85,46 @@ public class BlogIndexer {
         if (t != null) {
             System.out.println("doc id 0: " + t.url + " | len=" + t.length + " | title=" + t.title
                     + " | company=" + t.company + " | date=" + t.postDate + " | pr=" + t.pageRank);
+        }
+
+        long durationSec = (System.currentTimeMillis() - startMs) / 1000;
+        writeIndexManifest(durationSec);
+    }
+
+    private static void writeIndexManifest(long durationSec) {
+        try {
+            long postingsTotal = 0;
+            long totalDocLen = 0;
+            for (List<Posting> ps : invertedIndex.values()) postingsTotal += ps.size();
+            for (BlogDocMeta m : docMetadata.values()) totalDocLen += m.length;
+
+            com.google.gson.JsonObject m = new com.google.gson.JsonObject();
+            m.addProperty("timestamp", java.time.Instant.now().toString());
+            m.addProperty("duration_sec", durationSec);
+            m.addProperty("input_dir", "BLOGS");
+            m.addProperty("input_files_scanned", filesScanned);
+            m.addProperty("docs_indexed", docId);
+            m.addProperty("docs_skipped_dup_url", dupUrlSkipped);
+            m.addProperty("tokens_unique", invertedIndex.size());
+            m.addProperty("postings_total", postingsTotal);
+            m.addProperty("avg_doc_length", docId == 0 ? 0 : (int) (totalDocLen / docId));
+            m.addProperty("bigram_strategy", bigramStrategy);
+            m.addProperty("max_heap_mb", Runtime.getRuntime().maxMemory() / (1024 * 1024));
+            m.addProperty("embed_available", embedAvailable);
+            if (embedAvailable) {
+                m.addProperty("embed_model", BlogReranker.MODEL_URL);
+                m.addProperty("embed_dim", BlogReranker.EMBEDDING_DIM);
+                m.addProperty("embed_text_char_cap", embeddingTextCharCap);
+                m.addProperty("embeddings_written", docEmbeddings.size());
+                m.addProperty("embeddings_failed", embeddingsFailed);
+            }
+
+            java.nio.file.Files.createDirectories(java.nio.file.Path.of("eval"));
+            java.nio.file.Files.writeString(java.nio.file.Path.of("eval/index_manifest.json"),
+                    new com.google.gson.GsonBuilder().setPrettyPrinting().create().toJson(m));
+            System.out.println("Written eval/index_manifest.json");
+        } catch (Exception e) {
+            System.err.println("index manifest write failed: " + e.getMessage());
         }
     }
 
@@ -167,6 +238,7 @@ public class BlogIndexer {
     public static void indexDirectory() {
         List<String> filePaths = Parser.parseDirectory("BLOGS");
         if (filePaths == null) return;
+        filesScanned = filePaths.size();
 
         for (String filePath : filePaths) {
             try (Reader reader = new FileReader(filePath)) {
@@ -187,7 +259,8 @@ public class BlogIndexer {
     }
 
     public static void indexDocument(String url, List<Node> docNodes, String rssTitle, String company, String postDate) {
-        if (url == null || seenUrls.contains(url)) return;
+        if (url == null) return;
+        if (seenUrls.contains(url)) { dupUrlSkipped++; return; }
         seenUrls.add(url);
 
         int currentDocId = docId++;
@@ -228,5 +301,67 @@ public class BlogIndexer {
         int docLength = tokenMap.values().stream().mapToInt(tr -> tr.tf).sum();
         String title = (rssTitle != null && !rssTitle.isEmpty()) ? rssTitle : htmlTitle;
         docMetadata.put(currentDocId, new BlogDocMeta(url, docLength, title, 0.0, company, postDate));
+
+        // Dense embedding: title + truncated body. The HF tokenizer truncates to 256
+        // tokens internally; the char cap is just to bound StringBuilder churn. Failures
+        // (network blip, OOM) are logged and the doc is left without an embedding —
+        // it'll be unrankable by the dense reranker but BM25 still surfaces it.
+        if (embedAvailable) {
+            try {
+                StringBuilder body = new StringBuilder(embeddingTextCharCap + 256);
+                if (title != null) body.append(title).append(". ");
+                for (Node node : docNodes) {
+                    if (node.tag == Tag.TITLE || node.text == null) continue;
+                    body.append(node.text).append(' ');
+                    if (body.length() >= embeddingTextCharCap) break;
+                }
+                float[] vec = BlogReranker.embed(body.toString());
+                docEmbeddings.put(currentDocId, vec);
+            } catch (Exception e) {
+                embeddingsFailed++;
+                if (embeddingsFailed <= 3) {
+                    System.err.println("WARN: embed failed for doc " + currentDocId
+                            + " (" + url + "): " + e.getMessage());
+                }
+            }
+        }
+    }
+
+    public static void writeBlogEmbeddings() {
+        if (docEmbeddings.isEmpty()) {
+            System.err.println("WARN: no embeddings to write, skipping blog_embeddings.bin");
+            return;
+        }
+        int dim = BlogReranker.EMBEDDING_DIM;
+        int n = docId; // dense slot count: one row per docId, even if some failed
+        // Header: [int32 N][int32 dim], then N * dim float32. Doc i's vector lives
+        // at byte offset 8 + i * dim * 4. Missing docs get a zero vector so cosine
+        // against them is 0 (sinks to bottom of rerank without special-casing).
+        long bytes = 8L + (long) n * dim * 4L;
+        try (FileChannel ch = FileChannel.open(Path.of("blog_embeddings.bin"),
+                StandardOpenOption.CREATE,
+                StandardOpenOption.WRITE,
+                StandardOpenOption.TRUNCATE_EXISTING)) {
+
+            ByteBuffer header = ByteBuffer.allocate(8);
+            header.putInt(n);
+            header.putInt(dim);
+            header.flip();
+            ch.write(header);
+
+            float[] zero = new float[dim];
+            ByteBuffer row = ByteBuffer.allocate(dim * 4);
+            for (int i = 0; i < n; i++) {
+                float[] v = docEmbeddings.getOrDefault(i, zero);
+                row.clear();
+                for (float f : v) row.putFloat(f);
+                row.flip();
+                ch.write(row);
+            }
+            System.out.printf("Wrote blog_embeddings.bin (%d docs × %d dim, %.1f MB)%n",
+                    n, dim, bytes / 1024.0 / 1024.0);
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
     }
 }
