@@ -1,0 +1,266 @@
+[
+  {
+    "query": "idempotency keys",
+    "category": "ARCHITECTURE CONCEPTS",
+    "expected_result_type": "Post on idempotent request handling in distributed APIs",
+    "relevance_notes": "Relevant if it details deduplication of repeated requests, preferably with real API implementation examples."
+  },
+  {
+    "query": "circuit breakers",
+    "category": "ARCHITECTURE CONCEPTS",
+    "expected_result_type": "Post describing failure isolation patterns in microservices",
+    "relevance_notes": "Must explain open/closed/half-open states and how the pattern prevents cascading system failures."
+  },
+  {
+    "query": "event sourcing",
+    "category": "ARCHITECTURE CONCEPTS",
+    "expected_result_type": "Deep dive into storing state as immutable event logs",
+    "relevance_notes": "Should contrast the pattern with traditional CRUD architectures and detail log replay mechanics."
+  },
+  {
+    "query": "write-ahead logging",
+    "category": "ARCHITECTURE CONCEPTS",
+    "expected_result_type": "Storage-engine post on WAL design and durability",
+    "relevance_notes": "Should explicitly explain WAL's role in crash recovery and disk I/O optimization."
+  },
+  {
+    "query": "consistent hashing",
+    "category": "ARCHITECTURE CONCEPTS",
+    "expected_result_type": "Post on hash-ring design for distributed caching",
+    "relevance_notes": "Relevant if it covers the algorithmic distribution, virtual nodes, and minimal reshuffling during scaling."
+  },
+  {
+    "query": "rate limiting",
+    "category": "ARCHITECTURE CONCEPTS",
+    "expected_result_type": "Post on throttling strategies in API design",
+    "relevance_notes": "Should include token bucket or leaky bucket concepts and distributed rate-limiting logic."
+  },
+  {
+    "query": "service mesh",
+    "category": "ARCHITECTURE CONCEPTS",
+    "expected_result_type": "Overview of infrastructure layer for service comms",
+    "relevance_notes": "Should mention proxies, mTLS routing, and observability abstractions (e.g., Envoy, Istio)."
+  },
+  {
+    "query": "distributed locking",
+    "category": "ARCHITECTURE CONCEPTS",
+    "expected_result_type": "Post on mutual exclusion across distributed nodes",
+    "relevance_notes": "Must address correctness pitfalls (e.g., clock skew, fencing tokens) rather than simple Redis set commands."
+  },
+  {
+    "query": "JVM tail latency",
+    "category": "LANGUAGE/RUNTIME INTERNALS",
+    "expected_result_type": "Post on HotSpot tuning to reduce p99 response times",
+    "relevance_notes": "Relevant if it covers safepoints, GC pauses, or specific JVM flags used to mitigate latency outliers."
+  },
+  {
+    "query": "Rust async runtime overhead",
+    "category": "LANGUAGE/RUNTIME INTERNALS",
+    "expected_result_type": "Post on Tokio/async-std polling and context switching",
+    "relevance_notes": "Relevant if it measures the actual cost of future polling, task allocation, or executor thread mechanics."
+  },
+  {
+    "query": "Go GC pause",
+    "category": "LANGUAGE/RUNTIME INTERNALS",
+    "expected_result_type": "Post analyzing Go's concurrent garbage collector",
+    "relevance_notes": "Relevant if it discusses pacing algorithms, GOGC tuning, write barriers, or measured STW pause times."
+  },
+  {
+    "query": "JIT deoptimization triggers",
+    "category": "LANGUAGE/RUNTIME INTERNALS",
+    "expected_result_type": "Post explaining why tracing/JIT compilers bail out",
+    "relevance_notes": "Should list specific programmatic causes (e.g., megamorphic calls, type instability) and debugging techniques."
+  },
+  {
+    "query": "Python GIL contention",
+    "category": "LANGUAGE/RUNTIME INTERNALS",
+    "expected_result_type": "Post on CPython's Global Interpreter Lock bottlenecks",
+    "relevance_notes": "Relevant if it measures thread contention overhead and discusses architectural workarounds (e.g., multiprocessing)."
+  },
+  {
+    "query": "JVM escape analysis",
+    "category": "LANGUAGE/RUNTIME INTERNALS",
+    "expected_result_type": "Post on HotSpot stack allocation optimizations",
+    "relevance_notes": "Must explain the theory of scalar replacement and provide examples of when the optimization successfully fires."
+  },
+  {
+    "query": "Node.js event loop blocking",
+    "category": "LANGUAGE/RUNTIME INTERNALS",
+    "expected_result_type": "Post on libuv loop phases and synchronous blocking",
+    "relevance_notes": "Relevant if it details how to detect event loop lag in production and mitigation via worker threads."
+  },
+  {
+    "query": "Rust pin projection",
+    "category": "LANGUAGE/RUNTIME INTERNALS",
+    "expected_result_type": "Post explaining self-referential structs and async",
+    "relevance_notes": "Must clearly explain why the Pin trait exists to prevent memory unsafety in Rust futures."
+  },
+  {
+    "query": "C++ move semantics cost",
+    "category": "LANGUAGE/RUNTIME INTERNALS",
+    "expected_result_type": "Post analyzing rvalue references and NRVO",
+    "relevance_notes": "Relevant if it demonstrates generated assembly code or benchmarks the actual cycle cost of moves vs copies."
+  },
+  {
+    "query": "cache invalidation strategies",
+    "category": "SYSTEMS AND PERFORMANCE",
+    "expected_result_type": "Post on distributed cache consistency challenges",
+    "relevance_notes": "Must cover write-through/write-behind, TTLs, and explicit invalidation pipelines (not just local caching)."
+  },
+  {
+    "query": "TCP head-of-line blocking",
+    "category": "SYSTEMS AND PERFORMANCE",
+    "expected_result_type": "Post on transport layer packet loss implications",
+    "relevance_notes": "Must explain the problem conceptually and discuss modern workarounds like HTTP/3 and QUIC protocols."
+  },
+  {
+    "query": "lock-free data structures",
+    "category": "SYSTEMS AND PERFORMANCE",
+    "expected_result_type": "Post on memory ordering and CAS loop implementations",
+    "relevance_notes": "Relevant if it rigorously addresses correctness issues (ABA problem, memory barriers) rather than simple speed claims."
+  },
+  {
+    "query": "write amplification SSD",
+    "category": "SYSTEMS AND PERFORMANCE",
+    "expected_result_type": "Post on flash memory constraints and storage engines",
+    "relevance_notes": "Must detail how LSM-tree compactions or database checkpoints multiply physical disk writes."
+  },
+  {
+    "query": "CPU branch misprediction",
+    "category": "SYSTEMS AND PERFORMANCE",
+    "expected_result_type": "Post on pipeline flushes and branch predictor behavior",
+    "relevance_notes": "Should show hardware performance counters or microbenchmarks detailing the cycle cost of bad branches."
+  },
+  {
+    "query": "coordinated omission",
+    "category": "SYSTEMS AND PERFORMANCE",
+    "expected_result_type": "Post on systemic latency measurement biases",
+    "relevance_notes": "Highly relevant if it explicitly discusses Gil Tene's methodology of correcting load-testing measurement artifacts."
+  },
+  {
+    "query": "vector quantization",
+    "category": "ML/DATA INFRA",
+    "expected_result_type": "Post on compressing high-dimensional embeddings",
+    "relevance_notes": "Relevant if it covers Product Quantization (PQ), memory footprint reduction, and ANN search speed tradeoffs."
+  },
+  {
+    "query": "training data deduplication",
+    "category": "ML/DATA INFRA",
+    "expected_result_type": "Post on cleaning massive datasets for LLM training",
+    "relevance_notes": "Relevant if it discusses MinHash, LSH (Locality-Sensitive Hashing), and the impact of duplicates on model memorization."
+  },
+  {
+    "query": "embedding model serving",
+    "category": "ML/DATA INFRA",
+    "expected_result_type": "Post on scaling vector inference in production",
+    "relevance_notes": "Should cover dynamic batching, GPU memory utilization, and network latency in embedding generation."
+  },
+  {
+    "query": "RAG retrieval latency",
+    "category": "ML/DATA INFRA",
+    "expected_result_type": "Post optimizing the search phase of GenAI pipelines",
+    "relevance_notes": "Relevant if it breaks down the timing of vector search, cross-encoder reranking, and context injection."
+  },
+  {
+    "query": "transformer KV cache",
+    "category": "ML/DATA INFRA",
+    "expected_result_type": "Post on memory management during LLM token generation",
+    "relevance_notes": "Must explain Key-Value caching theory, PagedAttention, or eviction policies to prevent GPU OOM."
+  },
+  {
+    "query": "distributed training checkpointing",
+    "category": "ML/DATA INFRA",
+    "expected_result_type": "Post on fault tolerance in massive model training",
+    "relevance_notes": "Relevant if it covers async I/O, state sharding, and recovery times for multi-node GPU clusters."
+  },
+  {
+    "query": "feature engineering pipelines",
+    "category": "ML/DATA INFRA",
+    "expected_result_type": "Post on streaming vs batch transformations",
+    "relevance_notes": "Should cover DAG orchestrators, stateful stream processing, and real-time inference latency."
+  },
+  {
+    "query": "model quantization int8",
+    "category": "ML/DATA INFRA",
+    "expected_result_type": "Post on Post-Training Quantization (PTQ) or QAT",
+    "relevance_notes": "Relevant if it discusses calibration techniques, accuracy degradation metrics, and hardware kernel support."
+  },
+  {
+    "query": "GPU memory fragmentation",
+    "category": "ML/DATA INFRA",
+    "expected_result_type": "Post on PyTorch/CUDA memory allocator behavior",
+    "relevance_notes": "Should detail why fragmentation occurs during dynamic sequence lengths and how to profile it."
+  },
+  {
+    "query": "Marc Brooker queueing",
+    "category": "KNOWN-AUTHOR PROBES",
+    "expected_result_type": "brooker.co.za post on timeouts, retries, and queues",
+    "relevance_notes": "Must surface Brooker's specific mathematical analyses of queueing theory or metastability. A generic queueing post not by Brooker scores 1 at most."
+  },
+  {
+    "query": "Dan Luu latency",
+    "category": "KNOWN-AUTHOR PROBES",
+    "expected_result_type": "danluu.com post on hardware/software latency measurement",
+    "relevance_notes": "Must surface a specific article from danluu.com measuring hardware or software latency (keyboard, terminal, input lag, etc.). Posts from other authors score 1 at most."
+  },
+  {
+    "query": "Julia Evans debugging tools",
+    "category": "KNOWN-AUTHOR PROBES",
+    "expected_result_type": "jvns.ca post on Linux utilities and network tracing",
+    "relevance_notes": "Must surface Julia Evans's posts on tools like strace, tcpdump, dig, or similar Linux debugging utilities. Posts from other authors score 1 at most."
+  },
+  {
+    "query": "auth",
+    "category": "AMBIGUOUS / HARD",
+    "expected_result_type": "Any post covering authn/authz, OAuth, or sessions",
+    "relevance_notes": "Tests stem expansion. Relevant if it matches authentication or authorization contextually. A post about database auth config scores 1; a deep OAuth2/JWT architecture post scores 3."
+  },
+  {
+    "query": "logs",
+    "category": "AMBIGUOUS / HARD",
+    "expected_result_type": "Post on observability or Write-Ahead Logging",
+    "relevance_notes": "Tests disambiguation. Either database WALs or telemetry/structured logging are acceptable if the engineering depth is high. A vendor pitch with no technical depth scores 0."
+  },
+  {
+    "query": "memory leak",
+    "category": "AMBIGUOUS / HARD",
+    "expected_result_type": "Post on diagnosing application heap exhaustion",
+    "relevance_notes": "Broad term; relevant if it demonstrates real-world debugging workflows (heap dumps, profilers) rather than theory alone."
+  },
+  {
+    "query": "caching",
+    "category": "AMBIGUOUS / HARD",
+    "expected_result_type": "Post on systemic cache design or invalidation",
+    "relevance_notes": "Broad term; tests ranking to see if authoritative architectural posts bubble to the top. A tutorial on browser caching scores 1; a distributed cache invalidation deep-dive scores 3."
+  },
+  {
+    "query": "queues",
+    "category": "AMBIGUOUS / HARD",
+    "expected_result_type": "Post on message brokering or queueing theory",
+    "relevance_notes": "Tests context. Acceptable results include RabbitMQ/Kafka architectural deep dives or theoretical load analysis. A post merely mentioning a task queue in passing scores 1."
+  },
+  {
+    "query": "monitoring",
+    "category": "AMBIGUOUS / HARD",
+    "expected_result_type": "Post on telemetry, alerting, and SLI/SLO practice",
+    "relevance_notes": "Broad term; must return substantive posts on observability culture rather than generic vendor pitches. SLI/SLO/error-budget discussions score 3."
+  },
+  {
+    "query": "testing",
+    "category": "AMBIGUOUS / HARD",
+    "expected_result_type": "Post on engineering test strategy (e2e, fuzzing, property-based)",
+    "relevance_notes": "Broad term; highly relevant if it covers advanced topics like property-based testing, fault injection, or chaos engineering. A basic unit-test tutorial scores 1."
+  },
+  {
+    "query": "how to train a puppy",
+    "category": "NEGATIVE / OFF-CORPUS",
+    "expected_result_type": "No relevant result",
+    "relevance_notes": "Off-corpus query. Any result returned must score 0. Tests that ML 'training' posts do not spuriously surface."
+  },
+  {
+    "query": "Taylor Swift tour dates",
+    "category": "NEGATIVE / OFF-CORPUS",
+    "expected_result_type": "No relevant result",
+    "relevance_notes": "Off-corpus query. Any result returned must score 0. Tests robustness against entertainment queries."
+  }
+]
