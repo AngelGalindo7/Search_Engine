@@ -31,6 +31,11 @@ public class Crawler {
     private static final Map<String, Long> lastFetchByDomain = new HashMap<>();
     private static final Gson gson = new GsonBuilder().disableHtmlEscaping().create();
     private static long totalBytesWritten = 0;
+    // Filename stems (sha1[0:16] of url) of every JSON already on disk across ALL company dirs.
+    // Lets us skip a fetch when a URL has been crawled under a different company name (e.g. a
+    // republished post in two companies' RSS), not just when it's already in the same dir.
+    private static final Set<String> globalUrlHashes = new HashSet<>();
+    private static int crossCompanyDuplicates = 0;
 
     public static List<BlogSource> loadBlogList(String opmlPath) throws Exception {
         List<BlogSource> blogs = new ArrayList<>();
@@ -51,14 +56,21 @@ public class Crawler {
     }
 
     public static void main(String[] args) throws Exception {
+        long crawlStartMs = System.currentTimeMillis();
         int blogLimit = args.length > 0 ? Integer.parseInt(args[0]) : Integer.MAX_VALUE;
         int postsPerBlogLimit = args.length > 1 ? Integer.parseInt(args[1]) : Integer.MAX_VALUE;
 
-        List<BlogSource> blogs = loadBlogList("engineering_blogs.opml");
+        // List<BlogSource> blogs = loadBlogList("engineering_blogs.opml");
+        List<BlogSource> allBlogs = loadBlogList("engineering_blogs.opml");
+        int feedsTotal = allBlogs.size();
         // Skip Medium-hosted feeds (ToS-restrictive + aggressive throttling)
+        List<BlogSource> blogs = new ArrayList<>(allBlogs);
         blogs.removeIf(b -> b.rssUrl != null && b.rssUrl.contains("medium.com/feed"));
+        int feedsSkippedMedium = feedsTotal - blogs.size();
 
         Files.createDirectories(Path.of(OUT_DIR));
+        loadGlobalUrlHashes();
+        System.out.println("Pre-loaded " + globalUrlHashes.size() + " existing URL hashes from BLOGS/");
 
         int totalPosts = 0;
         int totalSkipped = 0;
@@ -78,11 +90,84 @@ public class Crawler {
                     truncate(blog.name, 30), result[0], result[3], result[1], result[2]);
         }
 
+        long durationSec = (System.currentTimeMillis() - crawlStartMs) / 1000;
+
         System.out.println("---");
         System.out.println("Total posts written: " + totalPosts);
-        System.out.println("Total existing (already on disk): " + totalExisting);
+        // System.out.println("Total existing (already on disk): " + totalExisting);
+        System.out.println("Total existing (already on disk): " + totalExisting
+                + "  (of which " + crossCompanyDuplicates + " were cross-company duplicates skipped)");
         System.out.println("Total skipped (robots/url-unsafe): " + totalSkipped);
         System.out.println("Total failed (network/parse): " + totalFailed);
+
+        // blogsProcessed is post-increment; subtract 1 if loop hit the limit, else clamp to feed count
+        int crawledCount = Math.min(blogsProcessed > blogLimit ? blogLimit : blogsProcessed, blogs.size());
+        writeCrawlManifest(durationSec, feedsTotal, feedsSkippedMedium, blogs.size(),
+                crawledCount,
+                totalPosts, totalExisting, totalSkipped, totalFailed,
+                blogLimit, postsPerBlogLimit);
+    }
+
+    // Captures crawl-side provenance so a future eval delta is attributable to a corpus change
+    // (more feeds, more posts) rather than guessed at. Read by BlogSearch.writeManifest at eval time.
+    private static void writeCrawlManifest(long durationSec, int feedsTotal, int feedsSkippedMedium,
+                                           int feedsAttempted, int blogsProcessed,
+                                           int postsWritten, int postsExisting,
+                                           int postsSkipped, int postsFailed,
+                                           int blogLimit, int postsPerBlogLimit) {
+        try {
+            com.google.gson.JsonObject m = new com.google.gson.JsonObject();
+            m.addProperty("timestamp", java.time.Instant.now().toString());
+            m.addProperty("duration_sec", durationSec);
+            m.addProperty("opml_sha256", sha256File("engineering_blogs.opml"));
+            m.addProperty("feeds_total", feedsTotal);
+            m.addProperty("feeds_skipped_medium", feedsSkippedMedium);
+            m.addProperty("feeds_attempted", feedsAttempted);
+            m.addProperty("blogs_processed", blogsProcessed);
+            m.addProperty("posts_written", postsWritten);
+            m.addProperty("posts_existing", postsExisting);
+            m.addProperty("cross_company_duplicates_skipped", crossCompanyDuplicates);
+            m.addProperty("posts_skipped", postsSkipped);
+            m.addProperty("posts_failed", postsFailed);
+            m.addProperty("total_bytes_written", totalBytesWritten);
+            m.addProperty("user_agent", USER_AGENT);
+            m.addProperty("min_domain_delay_ms", MIN_DOMAIN_DELAY_MS);
+            m.addProperty("max_total_output_bytes", SecurityGuards.MAX_TOTAL_OUTPUT_BYTES);
+            m.addProperty("max_posts_per_blog_hard", SecurityGuards.MAX_POSTS_PER_BLOG_HARD);
+            m.addProperty("blog_limit_arg", blogLimit == Integer.MAX_VALUE ? -1 : blogLimit);
+            m.addProperty("posts_per_blog_limit_arg", postsPerBlogLimit == Integer.MAX_VALUE ? -1 : postsPerBlogLimit);
+            Files.createDirectories(Path.of("eval"));
+            Files.writeString(Path.of("eval/crawl_manifest.json"),
+                    new GsonBuilder().setPrettyPrinting().create().toJson(m));
+            System.out.println("Written eval/crawl_manifest.json");
+        } catch (Exception e) {
+            System.err.println("crawl manifest write failed: " + e.getMessage());
+        }
+    }
+
+    private static void loadGlobalUrlHashes() {
+        Path root = Path.of(OUT_DIR);
+        if (!Files.isDirectory(root)) return;
+        try (java.util.stream.Stream<Path> stream = Files.walk(root, 2)) {
+            stream.filter(p -> p.toString().endsWith(".json"))
+                  .map(p -> p.getFileName().toString())
+                  .map(n -> n.substring(0, n.length() - 5))   // strip .json
+                  .forEach(globalUrlHashes::add);
+        } catch (Exception e) {
+            System.err.println("loadGlobalUrlHashes failed: " + e.getMessage());
+        }
+    }
+
+    private static String sha256File(String path) {
+        try {
+            MessageDigest md = MessageDigest.getInstance("SHA-256");
+            byte[] bytes = md.digest(Files.readAllBytes(Path.of(path)));
+            StringBuilder sb = new StringBuilder();
+            for (byte b : bytes) sb.append(String.format("%02x", b));
+            return sb.toString();
+        } catch (Exception e) {
+            return "unknown";
+        }
     }
 
     private static int[] crawlBlog(BlogSource blog, int postLimit) {
@@ -148,6 +233,13 @@ public class Crawler {
                 existing++;
                 continue;
             }
+            // Cross-company dedup: same URL already crawled under a different company dir.
+            // The indexer would dedupe at index time anyway, but we save the fetch + disk write here.
+            if (globalUrlHashes.contains(hash)) {
+                crossCompanyDuplicates++;
+                existing++;
+                continue;
+            }
 
             if (!RobotsCheck.isAllowed(link, USER_AGENT)) {
                 postFailReasons.merge("robots-disallow", 1, Integer::sum);
@@ -177,6 +269,7 @@ public class Crawler {
                     gson.toJson(doc, w);
                 }
                 totalBytesWritten += Files.size(file);
+                globalUrlHashes.add(hash);
                 written++;
             } catch (Exception e) {
                 postFailReasons.merge(e.getClass().getSimpleName(), 1, Integer::sum);
