@@ -209,15 +209,13 @@ public class BlogIndexer {
                 tr.tf += 1;
                 tr.tagMask |= tag.bit;
             }
-            // Bigrams only in TITLE/HEADING — body bigrams (~1.3M unique types) OOM at 256m heap.
-            // Title/heading bigrams still capture "write-ahead logging", "circuit breaker", etc.
-            // with the highest tag multiplier (3× / 2×) so they contribute strong BM25 signal.
-            if (tag == Tag.TITLE || tag == Tag.HEADING) {
-                for (String bigram : Tokenizer.getNGrams(tokens, 2)) {
-                    TokenResult tr = tokenMap.computeIfAbsent(bigram, k -> new TokenResult());
-                    tr.tf += 1;
-                    tr.tagMask |= tag.bit;
-                }
+            // Bigrams let compound-noun queries ("write-ahead logging", "circuit breaker")
+            // beat unigram noise from high-DF tokens like "write", "log", "break".
+            // Requires -Xmx512m; body bigrams add ~1.3M unique types over 11K docs.
+            for (String bigram : Tokenizer.getNGrams(tokens, 2)) {
+                TokenResult tr = tokenMap.computeIfAbsent(bigram, k -> new TokenResult());
+                tr.tf += 1;
+                tr.tagMask |= tag.bit;
             }
         }
 
