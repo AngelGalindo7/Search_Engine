@@ -209,16 +209,12 @@ public class BlogIndexer {
                 tr.tf += 1;
                 tr.tagMask |= tag.bit;
             }
-            // Bigrams from TITLE/HEADING/EMPHASIS only — body bigrams (~1.3M unique types
-            // across 11K docs) exhaust the heap at any practical JVM size. Title, heading,
-            // and emphasis bigrams capture the compound terms that matter ("write-ahead
-            // logging", "circuit breaker", "event loop") with the highest tag multipliers.
-            if (tag == Tag.TITLE || tag == Tag.HEADING || tag == Tag.EMPHASIS) {
-                for (String bigram : Tokenizer.getNGrams(tokens, 2)) {
-                    TokenResult tr = tokenMap.computeIfAbsent(bigram, k -> new TokenResult());
-                    tr.tf += 1;
-                    tr.tagMask |= tag.bit;
-                }
+            // Bigrams let compound-noun queries ("write-ahead logging", "circuit breaker")
+            // beat unigram noise. Requires ~1.5g heap — run via fat JAR to bypass Maven overhead.
+            for (String bigram : Tokenizer.getNGrams(tokens, 2)) {
+                TokenResult tr = tokenMap.computeIfAbsent(bigram, k -> new TokenResult());
+                tr.tf += 1;
+                tr.tagMask |= tag.bit;
             }
         }
 
