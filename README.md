@@ -2,7 +2,7 @@
 
 Search engine over **13,594 posts** from **446 engineering blogs** (Stripe, Cloudflare, Netflix, Discord, Datadog, Uber, brooker.co.za, danluu.com, jvns.ca, etc). Built end-to-end in **Java 17** — custom binary inverted index, **BM25 + PageRank** ranking, and a **dense reranker** using **MiniLM** sentence embeddings. Search quality is measured with an **LLM-as-a-judge** eval harness powered by **OpenAI gpt-4o-mini**.
 
-**Live:** [engineering-blog-search.onrender.com](https://engineering-blog-search.onrender.com/)
+**Live:** [feedstack.fly.dev/](https://feedstack.fly.dev/)
 
 ---
 
