@@ -9,6 +9,7 @@ import com.google.gson.JsonParser;
 import java.io.IOException;
 import java.net.URI;
 import java.nio.ByteBuffer;
+import java.nio.MappedByteBuffer;
 import java.nio.channels.FileChannel;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -41,6 +42,8 @@ public class BlogSearch {
     public static final String SEARCH_CONFIG = System.getProperty("search.config", "bm25");
     public static final int    RERANK_CANDIDATES = 100;
     private static volatile float[][] docEmbeddingsCache;
+    private static FileChannel indexChannel;   // kept open; closing invalidates the mmap on some JVMs
+    private static MappedByteBuffer indexMmap;
 
     // Known author name (lowercase) → registrable domain for query-time domain boost.
     private static final Map<String, String> AUTHOR_DOMAINS = Map.of(
@@ -65,6 +68,7 @@ public class BlogSearch {
     };
 
     private static volatile List<SearchResult> topByPageRankCache;
+    private static volatile List<SearchResult> recentPostsCache;
     private static volatile Map<String, Object> statsCache;
     private static volatile Map<Integer, String> tldrCache;
 
@@ -254,6 +258,7 @@ public class BlogSearch {
         for (BlogDocMeta m : docMetadata.values()) totalLen += m.length;
         AVG_DOC_LENGTH = TOTAL_DOCS == 0 ? 1.0 : (double) totalLen / TOTAL_DOCS;
         loadTldr();
+        loadIndexMmap();
     }
 
     private static void loadTldr() {
@@ -292,8 +297,11 @@ public class BlogSearch {
                     entries.sort((a, b) -> Double.compare(b.getValue().pageRank, a.getValue().pageRank));
                     List<SearchResult> out = new ArrayList<>(Math.min(50, entries.size()));
                     for (int i = 0; i < Math.min(50, entries.size()); i++) {
+                        int docId = entries.get(i).getKey();
                         BlogDocMeta m = entries.get(i).getValue();
-                        out.add(new SearchResult(entries.get(i).getKey(), m.pageRank, m.title, m.company, m.url));
+                        String tldr = tldrCache != null ? tldrCache.get(docId) : null;
+                        out.add(new SearchResult(docId, m.pageRank, m.title, m.company, m.url,
+                                tldr, null, null, m.postDate));
                     }
                     topByPageRankCache = Collections.unmodifiableList(out);
                 }
@@ -301,6 +309,36 @@ public class BlogSearch {
         }
         int top = Math.min(Math.max(1, n), topByPageRankCache.size());
         return topByPageRankCache.subList(0, top);
+    }
+
+    public static List<SearchResult> recentPosts(int n) {
+        if (recentPostsCache == null) {
+            synchronized (BlogSearch.class) {
+                if (recentPostsCache == null) {
+                    String today = java.time.LocalDate.now(java.time.ZoneOffset.UTC).toString();
+                    List<Map.Entry<Integer, BlogDocMeta>> entries = new ArrayList<>(docMetadata.entrySet());
+                    entries.removeIf(e -> {
+                        String d = e.getValue().postDate;
+                        if (d == null || d.isBlank()) return true;
+                        String day = d.length() >= 10 ? d.substring(0, 10) : d;
+                        return day.compareTo(today) > 0;
+                    });
+                    entries.sort((a, b) -> b.getValue().postDate.compareTo(a.getValue().postDate));
+                    int limit = Math.min(50, entries.size());
+                    List<SearchResult> out = new ArrayList<>(limit);
+                    for (int i = 0; i < limit; i++) {
+                        int docId = entries.get(i).getKey();
+                        BlogDocMeta m = entries.get(i).getValue();
+                        String tldr = tldrCache != null ? tldrCache.get(docId) : null;
+                        out.add(new SearchResult(docId, 0.0, m.title, m.company, m.url,
+                                tldr, null, null, m.postDate));
+                    }
+                    recentPostsCache = Collections.unmodifiableList(out);
+                }
+            }
+        }
+        int top = Math.min(Math.max(1, n), recentPostsCache.size());
+        return recentPostsCache.subList(0, top);
     }
 
     public static Map<String, Object> stats() {
@@ -433,9 +471,10 @@ public class BlogSearch {
             if (explain) {
                 out.add(new SearchResult(docId, diversifiedRank.get(docId), m.title, m.company, m.url,
                         tldr, explainBm25.getOrDefault(docId, 0.0),
-                        explainPrMult.getOrDefault(docId, 0.0)));
+                        explainPrMult.getOrDefault(docId, 0.0), m.postDate));
             } else {
-                out.add(new SearchResult(docId, diversifiedRank.get(docId), m.title, m.company, m.url, tldr));
+                out.add(new SearchResult(docId, diversifiedRank.get(docId), m.title, m.company, m.url,
+                        tldr, null, null, m.postDate));
             }
         }
         return out;
@@ -474,7 +513,7 @@ public class BlogSearch {
         for (SearchResult r : head) {
             double cos = r.docId < docEmb.length ? BlogReranker.cosine(queryEmb, docEmb[r.docId]) : 0.0;
             out.add(new SearchResult(r.docId, cos, r.title, r.company, r.url,
-                    r.tldr, r.bm25Score, r.pageRankMultiplier));
+                    r.tldr, r.bm25Score, r.pageRankMultiplier, r.postDate));
         }
         out.addAll(tail);
         return out;
@@ -616,6 +655,22 @@ public class BlogSearch {
         return out;
     }
 
+    private static void loadIndexMmap() {
+        Path path = Path.of("blog_index.bin");
+        if (!Files.exists(path)) {
+            System.err.println("WARN: blog_index.bin not found; queries will return no results");
+            return;
+        }
+        try {
+            indexChannel = FileChannel.open(path, StandardOpenOption.READ);
+            indexMmap = indexChannel.map(FileChannel.MapMode.READ_ONLY, 0, indexChannel.size());
+            System.out.printf("Mapped blog_index.bin (%d MB) into virtual memory%n",
+                    indexChannel.size() / (1024 * 1024));
+        } catch (IOException e) {
+            System.err.println("WARN: could not mmap blog_index.bin: " + e.getMessage());
+        }
+    }
+
     public static List<Posting> getTokenPostings(String token) {
         TokenMeta tm = tokenMetadata.get(token);
         if (tm == null) return null;
@@ -623,28 +678,22 @@ public class BlogSearch {
         long offset = tm.offset;
         int length = tm.length;
 
+        // Was: FileChannel.open("blog_index.bin") inside a try-with-resources on every call.
+        // That caused O(T) file opens per query (T = tokens after bigram expansion, typically 9-15),
+        // each paying open + seek on a 248 MB file — 200-250 ms of the 444 ms median latency.
+        // Now: single READ_ONLY mmap at startup; duplicate() gives each caller an independent
+        // position/limit on the shared mapping. Thread-safe for concurrent reads.
         List<Posting> postings = new ArrayList<>(df);
-        try (FileChannel channel = FileChannel.open(Path.of("blog_index.bin"), StandardOpenOption.READ)) {
-            ByteBuffer buf = ByteBuffer.allocate(length);
-            // FileChannel.read is not guaranteed to fill the buffer in one call;
-            // loop until full or EOF to guard against partial reads and index/metadata skew.
-            long pos = offset;
-            while (buf.hasRemaining()) {
-                int n = channel.read(buf, pos);
-                if (n <= 0) break;
-                pos += n;
-            }
-            buf.flip();
-            // read only complete postings — silently skips trailing partial bytes
-            // that result from a stale token_meta pointing into a mismatched index file.
-            while (buf.remaining() >= 12) {
-                int docId   = buf.getInt();
-                int tf      = buf.getInt();
-                int tagMask = buf.getInt();
-                postings.add(new Posting(docId, tf, tagMask));
-            }
-        } catch (IOException e) {
-            e.printStackTrace();
+        if (indexMmap == null) return postings;  // mmap failed at startup; warning already printed
+        ByteBuffer buf = indexMmap.duplicate();
+        buf.position((int) offset).limit((int) offset + length);
+        // read only complete postings — silently skips trailing partial bytes
+        // that result from a stale token_meta pointing into a mismatched index file.
+        while (buf.remaining() >= 12) {
+            int docId   = buf.getInt();
+            int tf      = buf.getInt();
+            int tagMask = buf.getInt();
+            postings.add(new Posting(docId, tf, tagMask));
         }
         return postings;
     }
