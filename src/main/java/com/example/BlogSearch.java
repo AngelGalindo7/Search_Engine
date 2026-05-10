@@ -586,6 +586,36 @@ public class BlogSearch {
         }
     }
 
+    public static List<SearchResult> findNeighbors(int docId, int k, String excludeCompany) {
+        float[][] emb = loadDocEmbeddings();
+        if (emb.length == 0 || docId < 0 || docId >= emb.length) return List.of();
+        float[] qVec = emb[docId];
+        BlogDocMeta qMeta = docMetadata.get(docId);
+        // min-heap: keep top-k by cosine (highest score = best neighbor)
+        PriorityQueue<double[]> heap = new PriorityQueue<>(k + 1,
+                Comparator.comparingDouble(a -> a[0]));
+        for (int i = 0; i < emb.length; i++) {
+            if (i == docId) continue;
+            BlogDocMeta m = docMetadata.get(i);
+            if (m == null) continue;
+            if (excludeCompany != null && excludeCompany.equalsIgnoreCase(m.company)) continue;
+            double cos = BlogReranker.cosine(qVec, emb[i]);
+            heap.offer(new double[]{cos, i});
+            if (heap.size() > k) heap.poll();
+        }
+        List<double[]> sorted = new ArrayList<>(heap);
+        sorted.sort(Comparator.comparingDouble((double[] a) -> a[0]).reversed());
+        List<SearchResult> out = new ArrayList<>(sorted.size());
+        for (double[] pair : sorted) {
+            int nId = (int) pair[1];
+            BlogDocMeta m = docMetadata.get(nId);
+            if (m == null) continue;
+            out.add(new SearchResult(nId, pair[0], m.title, m.company, m.url,
+                    tldrCache != null ? tldrCache.get(nId) : null));
+        }
+        return out;
+    }
+
     public static List<Posting> getTokenPostings(String token) {
         TokenMeta tm = tokenMetadata.get(token);
         if (tm == null) return null;
