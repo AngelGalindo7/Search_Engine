@@ -79,17 +79,39 @@
       title.textContent = r.title || '(untitled)';
       main.appendChild(title);
 
-      if (r.company) {
-        const company = document.createElement('div');
-        company.className = 'result-company';
-        company.textContent = r.company;
-        main.appendChild(company);
+      // was: separate result-company div, no date, full URL
+      if (r.company || r.postDate) {
+        const metaLine = document.createElement('div');
+        metaLine.className = 'result-meta-line';
+        if (r.company) {
+          const company = document.createElement('span');
+          company.className = 'result-company';
+          company.textContent = r.company;
+          metaLine.appendChild(company);
+        }
+        const dateStr = formatPostDate(r.postDate);
+        if (dateStr) {
+          if (r.company) {
+            const sep = document.createElement('span');
+            sep.className = 'result-date-sep';
+            sep.textContent = '·';
+            metaLine.appendChild(sep);
+          }
+          const date = document.createElement('span');
+          date.className = 'result-date';
+          date.textContent = dateStr;
+          metaLine.appendChild(date);
+        }
+        main.appendChild(metaLine);
       }
 
-      const url = document.createElement('div');
-      url.className = 'result-url';
-      url.textContent = truncate(r.url, 80);
-      main.appendChild(url);
+      if (r.url) {
+        const url = document.createElement('div');
+        url.className = 'result-url';
+        try { url.textContent = new URL(r.url).hostname; }
+        catch (_) { url.textContent = truncate(r.url, 60); }
+        main.appendChild(url);
+      }
 
       if (r.tldr) {
         const tldr = document.createElement('p');
