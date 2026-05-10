@@ -35,6 +35,10 @@ public class BlogSearch {
     // RERANK_CANDIDATES from the lexical pipeline are re-sorted by cosine(query, doc)
     // using L2-normalized embeddings from blog_embeddings.bin.
     public static final String RERANKER_MODE = System.getProperty("search.reranker", "off");
+    // Pipeline selector for eval/leaderboard: "bm25" | "dense" | "hybrid". BlogServer
+    // always uses searchResults() directly; this flag only affects runEval() and the
+    // Retriever abstraction.
+    public static final String SEARCH_CONFIG = System.getProperty("search.config", "bm25");
     public static final int    RERANK_CANDIDATES = 100;
     private static volatile float[][] docEmbeddingsCache;
 
@@ -62,6 +66,7 @@ public class BlogSearch {
 
     private static volatile List<SearchResult> topByPageRankCache;
     private static volatile Map<String, Object> statsCache;
+    private static volatile Map<Integer, String> tldrCache;
 
     private static final String[] DEFAULT_EVAL_QUERIES = {
             "kubernetes networking",
@@ -119,12 +124,15 @@ public class BlogSearch {
         JsonArray queries = JsonParser.parseString(Files.readString(queriesPath)).getAsJsonArray();
         JsonArray output = new JsonArray();
 
+        Retriever retriever = getConfiguredRetriever();
+        System.out.println("[eval] pipeline: " + SEARCH_CONFIG);
+
         for (JsonElement el : queries) {
             JsonObject q = el.getAsJsonObject();
             String queryText = q.get("query").getAsString();
             String category  = q.has("category") ? q.get("category").getAsString() : "";
 
-            List<SearchResult> hits = searchResults(queryText, 10);
+            List<SearchResult> hits = retriever.search(queryText, 10);
 
             JsonObject entry = new JsonObject();
             entry.addProperty("query", queryText);
@@ -181,6 +189,7 @@ public class BlogSearch {
         ranking.addProperty("DOMAIN_DECAY",  DOMAIN_DECAY);
         ranking.addProperty("AUTHOR_BOOST",  AUTHOR_BOOST);
         ranking.addProperty("BIGRAM_MIN_DF", BIGRAM_MIN_DF);
+        ranking.addProperty("SEARCH_CONFIG",  SEARCH_CONFIG);
         ranking.addProperty("RERANKER_MODE", RERANKER_MODE);
         if ("dense".equals(RERANKER_MODE)) {
             ranking.addProperty("RERANK_CANDIDATES", RERANK_CANDIDATES);
@@ -229,6 +238,14 @@ public class BlogSearch {
         }
     }
 
+    public static Retriever getConfiguredRetriever() {
+        return switch (SEARCH_CONFIG) {
+            case "dense"  -> new DenseRetriever();
+            case "hybrid" -> new RRFFusion(new BM25Retriever(), new DenseRetriever(), 60);
+            default       -> new BM25Retriever(); // "bm25"
+        };
+    }
+
     public static void loadDependencies() {
         tokenMetadata = BlogIndexer.readBlogTokenMetadata();
         docMetadata = BlogIndexer.readBlogDocMetadata();
@@ -236,6 +253,35 @@ public class BlogSearch {
         long totalLen = 0;
         for (BlogDocMeta m : docMetadata.values()) totalLen += m.length;
         AVG_DOC_LENGTH = TOTAL_DOCS == 0 ? 1.0 : (double) totalLen / TOTAL_DOCS;
+        loadTldr();
+    }
+
+    private static void loadTldr() {
+        Path path = Path.of("blog_tldr.txt");
+        if (!Files.exists(path)) {
+            System.err.println("WARN: blog_tldr.txt not found; run BlogTldrExtractor to enable TL;DRs");
+            tldrCache = Collections.emptyMap();
+            return;
+        }
+        Map<Integer, String> cache = new HashMap<>();
+        try (var reader = Files.newBufferedReader(path)) {
+            String line;
+            while ((line = reader.readLine()) != null) {
+                int tab = line.indexOf('\t');
+                if (tab < 1) continue;
+                try {
+                    int docId = Integer.parseInt(line.substring(0, tab));
+                    String tldr = line.substring(tab + 1);
+                    if (!tldr.isBlank()) cache.put(docId, tldr);
+                } catch (NumberFormatException ignored) {}
+            }
+        } catch (IOException e) {
+            System.err.println("WARN: could not read blog_tldr.txt: " + e.getMessage());
+            tldrCache = Collections.emptyMap();
+            return;
+        }
+        tldrCache = Collections.unmodifiableMap(cache);
+        System.out.printf("Loaded %d TL;DRs from blog_tldr.txt%n", tldrCache.size());
     }
 
     public static List<SearchResult> topByPageRank(int n) {
@@ -289,7 +335,13 @@ public class BlogSearch {
         return statsCache;
     }
 
-    public static List<SearchResult> searchResults(String query, int topN) {
+    // Core BM25 + tag-mask + PageRank + bigrams + synonyms + author boost + domain diversification.
+    // Does not apply dense rerank — call searchResults() for the full pipeline including rerank.
+    static List<SearchResult> bm25Search(String query, int topN) {
+        return bm25Search(query, topN, false);
+    }
+
+    static List<SearchResult> bm25Search(String query, int topN, boolean explain) {
         if (query == null || query.isBlank()) return Collections.emptyList();
 
         // Expand acronyms bidirectionally, then add bigrams so compound-noun
@@ -304,6 +356,9 @@ public class BlogSearch {
         }
 
         Map<Integer, Double> docRank = new HashMap<>();
+        // explain captures: raw BM25 sum (before prBoost) and the per-doc prBoost value.
+        Map<Integer, Double> explainBm25   = explain ? new HashMap<>() : null;
+        Map<Integer, Double> explainPrMult = explain ? new HashMap<>() : null;
         for (Map.Entry<String, List<Posting>> entry : queryIndex.entrySet()) {
             String token = entry.getKey();
             TokenMeta tm = tokenMetadata.get(token);
@@ -332,6 +387,11 @@ public class BlogSearch {
                 double finalScore = relevance + prBoost;
 
                 docRank.merge(p.docId, finalScore, Double::sum);
+                if (explain) {
+                    explainBm25.merge(p.docId, relevance, Double::sum);
+                    // prBoost is doc-fixed; last write wins (all postings produce same value).
+                    explainPrMult.put(p.docId, prBoost);
+                }
             }
         }
 
@@ -364,20 +424,59 @@ public class BlogSearch {
         }
         ranked.sort(Comparator.comparing(diversifiedRank::get).reversed());
 
-        // Dense rerank: re-sort the top-K prefix of `ranked` by cosine(query, doc).
-        // The tail (positions K..end) keeps its BM25-order, which only matters for
-        // queries with > K candidates -- those tail docs aren't visible at top-N.
-        if ("dense".equals(RERANKER_MODE)) {
-            denseRerank(query, ranked, diversifiedRank);
-        }
-
         int top = Math.min(topN, ranked.size());
         List<SearchResult> out = new ArrayList<>(top);
         for (int i = 0; i < top; i++) {
             int docId = ranked.get(i);
             BlogDocMeta m = docMetadata.get(docId);
-            out.add(new SearchResult(docId, diversifiedRank.get(docId), m.title, m.company, m.url));
+            String tldr = tldrCache != null ? tldrCache.get(docId) : null;
+            if (explain) {
+                out.add(new SearchResult(docId, diversifiedRank.get(docId), m.title, m.company, m.url,
+                        tldr, explainBm25.getOrDefault(docId, 0.0),
+                        explainPrMult.getOrDefault(docId, 0.0)));
+            } else {
+                out.add(new SearchResult(docId, diversifiedRank.get(docId), m.title, m.company, m.url, tldr));
+            }
         }
+        return out;
+    }
+
+    public static List<SearchResult> searchResults(String query, int topN) {
+        return searchResults(query, topN, false);
+    }
+
+    public static List<SearchResult> searchResults(String query, int topN, boolean explain) {
+        // bm25Search already covers BM25 + tag-mask + PageRank + bigrams + synonyms + diversification.
+        // Dense rerank is a post-processing step layered on top: re-sort the top-K prefix by cosine.
+        List<SearchResult> results = bm25Search(query, topN, explain);
+        if (!"dense".equals(RERANKER_MODE) || results.isEmpty()) return results;
+
+        // Dense rerank: re-sort the top-K prefix of results by cosine(query, doc).
+        // The tail (positions K..end) keeps its BM25-order, which only matters for
+        // queries with > K candidates -- those tail docs aren't visible at top-N.
+        float[][] docEmb = loadDocEmbeddings();
+        if (docEmb.length == 0) return results;
+        float[] queryEmb;
+        try {
+            queryEmb = BlogReranker.embed(query);
+        } catch (Exception e) {
+            System.err.println("dense rerank: query embed failed: " + e.getMessage());
+            return results;
+        }
+        int k = Math.min(RERANK_CANDIDATES, results.size());
+        List<SearchResult> head = new ArrayList<>(results.subList(0, k));
+        List<SearchResult> tail = results.subList(k, results.size());
+        head.sort(Comparator.comparingDouble((SearchResult r) ->
+                r.docId < docEmb.length ? BlogReranker.cosine(queryEmb, docEmb[r.docId]) : 0.0
+        ).reversed());
+        List<SearchResult> out = new ArrayList<>(results.size());
+        // Rebuild with cosine as the score for the reranked prefix; carry explain fields through.
+        for (SearchResult r : head) {
+            double cos = r.docId < docEmb.length ? BlogReranker.cosine(queryEmb, docEmb[r.docId]) : 0.0;
+            out.add(new SearchResult(r.docId, cos, r.title, r.company, r.url,
+                    r.tldr, r.bm25Score, r.pageRankMultiplier));
+        }
+        out.addAll(tail);
         return out;
     }
 
@@ -451,37 +550,6 @@ public class BlogSearch {
         if ((tagMask & Tag.EMPHASIS.bit) != 0) return 1.5;
         if ((tagMask & Tag.BODY.bit) != 0) return 1.0;
         return 1.0;
-    }
-
-    // Mutates `ranked` in place: the first min(K, size) entries are re-sorted by
-    // cosine similarity. `diversifiedRank` is updated for those entries so the
-    // SearchResult.score returned to the caller reflects the cosine value.
-    private static void denseRerank(String query, List<Integer> ranked,
-                                     Map<Integer, Double> diversifiedRank) {
-        float[][] docEmb = loadDocEmbeddings();
-        if (docEmb.length == 0) return;
-
-        float[] queryEmb;
-        try {
-            queryEmb = BlogReranker.embed(query);
-        } catch (Exception e) {
-            System.err.println("dense rerank: query embed failed: " + e.getMessage());
-            return;
-        }
-
-        int k = Math.min(RERANK_CANDIDATES, ranked.size());
-        List<Integer> head = ranked.subList(0, k);
-        Map<Integer, Double> rerank = new HashMap<>(k);
-        for (int docId : head) {
-            // docs without an embedding (zero vector or out of range) get cosine 0
-            // and sink to the bottom of the K-prefix without special-casing.
-            double cos = (docId < docEmb.length)
-                    ? BlogReranker.cosine(queryEmb, docEmb[docId])
-                    : 0.0;
-            rerank.put(docId, cos);
-        }
-        head.sort(Comparator.comparing(rerank::get).reversed());
-        for (int docId : head) diversifiedRank.put(docId, rerank.get(docId));
     }
 
     private static float[][] loadDocEmbeddings() {
