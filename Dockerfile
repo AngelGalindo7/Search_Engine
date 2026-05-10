@@ -11,7 +11,9 @@ WORKDIR /app
 COPY --from=build /app/target/SearchEngine-1.0-SNAPSHOT.jar app.jar
 # Corpus baked into image so IndexBootstrap skips the download on every start.
 # Docker layer cache means re-deploys only re-upload the JAR layer, not the corpus.
-COPY blog_index.bin blog_token_meta.txt blog_embeddings.bin blog_doc_meta.txt ./
+COPY blog_index.bin blog_token_meta.txt blog_embeddings.bin blog_doc_meta.txt blog_tldr.txt ./
+RUN mkdir -p eval
+COPY eval/clusters.json eval/
 # DJL pytorch native (~300MB) persists on a Fly volume at /data so it
 # downloads once and survives container restarts and redeploys.
 ENV DJL_CACHE_DIR=/data/.djl
