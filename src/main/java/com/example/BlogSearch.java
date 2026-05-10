@@ -663,9 +663,11 @@ public class BlogSearch {
         }
         try {
             indexChannel = FileChannel.open(path, StandardOpenOption.READ);
-            indexMmap = indexChannel.map(FileChannel.MapMode.READ_ONLY, 0, indexChannel.size());
-            System.out.printf("Mapped blog_index.bin (%d MB) into virtual memory%n",
-                    indexChannel.size() / (1024 * 1024));
+            long size = indexChannel.size();
+            indexMmap = indexChannel.map(FileChannel.MapMode.READ_ONLY, 0, size);
+            indexMmap.load();  // eagerly fault in all pages; one-time ~2-3s startup cost, eliminates page-fault variance on queries
+            System.out.printf("Mapped and loaded blog_index.bin (%d MB) into page cache%n",
+                    size / (1024 * 1024));
         } catch (IOException e) {
             System.err.println("WARN: could not mmap blog_index.bin: " + e.getMessage());
         }
