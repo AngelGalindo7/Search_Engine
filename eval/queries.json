@@ -262,5 +262,41 @@
     "category": "NEGATIVE / OFF-CORPUS",
     "expected_result_type": "No relevant result",
     "relevance_notes": "Off-corpus query. Any result returned must score 0. Tests robustness against entertainment queries."
+  },
+  {
+    "query": "Netflix chaos monkey",
+    "category": "SANITY",
+    "expected_result_type": "Netflix Tech Blog post introducing or describing the Chaos Monkey tool",
+    "relevance_notes": "Must surface a Netflix Engineering post specifically about Chaos Monkey (the resilience tool that randomly terminates instances). A generic chaos engineering post not from Netflix scores 1; the original Netflix Chaos Monkey post scores 3."
+  },
+  {
+    "query": "Google Dapper distributed tracing",
+    "category": "SANITY",
+    "expected_result_type": "Google or research blog post on the Dapper distributed tracing infrastructure",
+    "relevance_notes": "Must reference Dapper's trace/span model, sampling strategies, or its influence on OpenTelemetry/Zipkin. A generic distributed tracing post scores 1; a post directly discussing Dapper's design scores 3."
+  },
+  {
+    "query": "Amazon Dynamo key-value store",
+    "category": "SANITY",
+    "expected_result_type": "AWS or technical blog post on Dynamo's eventual-consistency architecture",
+    "relevance_notes": "Must cover Dynamo's consistent hashing ring, quorum reads/writes, or vector clocks. A generic NoSQL post scores 1; a post specifically analyzing Dynamo's design decisions scores 3."
+  },
+  {
+    "query": "Twitter Snowflake ID generation",
+    "category": "SANITY",
+    "expected_result_type": "Twitter Engineering post on the Snowflake distributed ID service",
+    "relevance_notes": "Must explain how Snowflake generates time-ordered 64-bit IDs across distributed nodes (timestamp + worker ID + sequence). A generic UUID/ID post scores 1; the Twitter Snowflake blog post or a close technical analysis scores 3."
+  },
+  {
+    "query": "Airbnb large-scale payments",
+    "category": "SANITY",
+    "expected_result_type": "Airbnb Engineering blog post on payments infrastructure at scale",
+    "relevance_notes": "Must discuss Airbnb's payment platform architecture — idempotency, ledger design, fraud detection, or cross-border settlement. A generic payments post scores 1; an Airbnb Engineering post on payment systems scores 3."
+  },
+  {
+    "query": "Facebook TAO graph database",
+    "category": "SANITY",
+    "expected_result_type": "Meta/Facebook Engineering post on the TAO distributed data store",
+    "relevance_notes": "Must describe TAO's object+association model, read-through caching tiers, or its role serving Facebook's social graph. A generic graph database post scores 1; a post specifically on TAO's architecture scores 3."
   }
 ]
