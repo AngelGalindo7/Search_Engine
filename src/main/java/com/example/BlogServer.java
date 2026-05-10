@@ -47,6 +47,7 @@ public class BlogServer {
         server.createContext("/stats", BlogServer::handleStats);
         server.createContext("/health", BlogServer::handleHealth);
         server.createContext("/clusters", BlogServer::handleClusters);
+        server.createContext("/more-like", BlogServer::handleMoreLike);
         server.createContext("/", BlogServer::handleStatic);
         server.setExecutor(Executors.newFixedThreadPool(4));
         server.start();
@@ -168,6 +169,35 @@ public class BlogServer {
             case "ico"  -> "image/x-icon";
             default     -> "application/octet-stream";
         };
+    }
+
+    static void handleMoreLike(HttpExchange ex) throws IOException {
+        addCorsHeaders(ex);
+        if ("OPTIONS".equalsIgnoreCase(ex.getRequestMethod())) {
+            ex.sendResponseHeaders(204, -1); ex.close(); return;
+        }
+        if (!"GET".equalsIgnoreCase(ex.getRequestMethod())) {
+            sendJson(ex, 405, Map.of("error", "Method not allowed")); return;
+        }
+        Map<String, String> params = parseQueryString(ex.getRequestURI());
+        String docIdStr = params.get("docId");
+        if (docIdStr == null) {
+            sendJson(ex, 400, Map.of("error", "Missing docId parameter")); return;
+        }
+        int docId;
+        try { docId = Integer.parseInt(docIdStr); }
+        catch (NumberFormatException e) {
+            sendJson(ex, 400, Map.of("error", "Invalid docId")); return;
+        }
+        int top = Math.min(parsePositiveInt(params.get("top"), 5), 20);
+        String exclude = params.get("exclude");
+        long startNs = System.nanoTime();
+        java.util.List<SearchResult> results = BlogSearch.findNeighbors(docId, top, exclude);
+        long tookMs = (System.nanoTime() - startNs) / 1_000_000L;
+        if (results == null) {
+            sendJson(ex, 503, Map.of("error", "Embedding index not loaded")); return;
+        }
+        sendJson(ex, 200, Map.of("queryDocId", docId, "results", results, "tookMs", tookMs));
     }
 
     static void handleClusters(HttpExchange ex) throws IOException {
