@@ -18,7 +18,7 @@ primary_region = 'lax'
 
 [checks]
   [checks.health]
-    grace_period = "30s"
+    grace_period = "90s"
     interval = "15s"
     method = "GET"
     path = "/health"
