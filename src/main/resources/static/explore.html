@@ -1,0 +1,140 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Explore Engineering Topics</title>
+    <link rel="stylesheet" href="/static/style.css" />
+    <style>
+      .explore-header { margin-bottom: 32px; text-align: center; }
+      .explore-header a { font-size: 0.85em; color: var(--meta); text-decoration: none; }
+      .explore-header a:hover { text-decoration: underline; }
+      .cluster-grid {
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        gap: 16px;
+        margin-top: 8px;
+      }
+      .cluster-card {
+        border: 1px solid var(--border);
+        border-radius: 8px;
+        padding: 16px;
+        transition: background 100ms ease;
+      }
+      .cluster-card:hover { background: var(--hover); }
+      .cluster-label {
+        font-weight: 600;
+        font-size: 0.95em;
+        margin: 0 0 4px;
+        text-transform: capitalize;
+      }
+      .cluster-count {
+        font-size: 0.78em;
+        color: var(--muted);
+        margin: 0 0 12px;
+      }
+      .cluster-posts {
+        list-style: none;
+        margin: 0;
+        padding: 0;
+      }
+      .cluster-posts li {
+        font-size: 0.85em;
+        margin-bottom: 6px;
+        line-height: 1.35;
+      }
+      .cluster-posts a {
+        color: var(--link);
+        text-decoration: none;
+      }
+      .cluster-posts a:hover { text-decoration: underline; color: var(--link-hover); }
+      .cluster-posts .post-company {
+        color: var(--meta);
+        font-size: 0.9em;
+      }
+      .explore-notice {
+        text-align: center;
+        color: var(--meta);
+        margin-top: 48px;
+      }
+      @media (max-width: 720px) {
+        .cluster-grid { grid-template-columns: repeat(2, 1fr); }
+      }
+      @media (max-width: 480px) {
+        .cluster-grid { grid-template-columns: 1fr; }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="app">
+      <div class="explore-header">
+        <h1 class="title">Explore Engineering Topics</h1>
+        <a href="/">&larr; Back to search</a>
+      </div>
+      <div id="grid-container"></div>
+    </div>
+    <script>
+      (async () => {
+        const container = document.getElementById('grid-container');
+        let data;
+        try {
+          const res = await fetch('/clusters');
+          if (res.status === 404) {
+            container.innerHTML = '<p class="explore-notice">Topic index not built yet.</p>';
+            return;
+          }
+          data = await res.json();
+        } catch (e) {
+          container.innerHTML = '<p class="explore-notice">Could not load topic index.</p>';
+          return;
+        }
+
+        const clusters = (data.clusters || []).slice().sort((a, b) =>
+          b.post_count - a.post_count
+        );
+
+        const grid = document.createElement('div');
+        grid.className = 'cluster-grid';
+
+        for (const cl of clusters) {
+          const card = document.createElement('div');
+          card.className = 'cluster-card';
+
+          const label = document.createElement('p');
+          label.className = 'cluster-label';
+          label.textContent = cl.label || 'Cluster ' + cl.id;
+          card.appendChild(label);
+
+          const count = document.createElement('p');
+          count.className = 'cluster-count';
+          count.textContent = cl.post_count + ' posts';
+          card.appendChild(count);
+
+          const ul = document.createElement('ul');
+          ul.className = 'cluster-posts';
+          const posts = (cl.posts || []).slice(0, 3);
+          for (const p of posts) {
+            const li = document.createElement('li');
+            const a = document.createElement('a');
+            a.href = p.url;
+            a.target = '_blank';
+            a.rel = 'noopener noreferrer';
+            a.textContent = p.title || p.url;
+            li.appendChild(a);
+            if (p.company) {
+              const co = document.createElement('span');
+              co.className = 'post-company';
+              co.textContent = ' · ' + p.company;
+              li.appendChild(co);
+            }
+            ul.appendChild(li);
+          }
+          card.appendChild(ul);
+          grid.appendChild(card);
+        }
+
+        container.appendChild(grid);
+      })();
+    </script>
+  </body>
+</html>
