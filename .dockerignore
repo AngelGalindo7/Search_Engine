@@ -6,7 +6,10 @@ BLOGS/
 DEV/
 frontend/
 node_modules/
+# exclude generic binaries but allow the corpus files needed by the image
 *.bin
+!blog_index.bin
+!blog_embeddings.bin
 *.log
 *.log.*
 hs_err_pid*.log
