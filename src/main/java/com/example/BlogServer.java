@@ -11,6 +11,8 @@ import java.net.InetSocketAddress;
 import java.net.URI;
 import java.net.URLDecoder;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -23,6 +25,9 @@ public class BlogServer {
     private static final int DEFAULT_TOP = 10;
     private static final int MAX_TOP = 50;
     private static final Gson GSON = new Gson();
+
+    // Cached clusters.json content; populated on first /clusters request.
+    private static volatile String clustersCache;
 
     public static void main(String[] args) throws IOException, InterruptedException {
         IndexBootstrap.bootstrapIfNeeded();
@@ -41,6 +46,7 @@ public class BlogServer {
         server.createContext("/top", BlogServer::handleTop);
         server.createContext("/stats", BlogServer::handleStats);
         server.createContext("/health", BlogServer::handleHealth);
+        server.createContext("/clusters", BlogServer::handleClusters);
         server.createContext("/", BlogServer::handleStatic);
         server.setExecutor(Executors.newFixedThreadPool(4));
         server.start();
@@ -73,9 +79,10 @@ public class BlogServer {
         Map<String, String> params = parseQueryString(ex.getRequestURI());
         String q = params.getOrDefault("q", "").trim();
         int topN = clampTop(parsePositiveInt(params.get("top"), DEFAULT_TOP));
+        boolean explain = "1".equals(params.get("explain"));
 
         long startNs = System.nanoTime();
-        List<SearchResult> results = BlogSearch.searchResults(q, topN);
+        List<SearchResult> results = BlogSearch.searchResults(q, topN, explain);
         long tookMs = (System.nanoTime() - startNs) / 1_000_000L;
 
         Map<String, Object> body = new LinkedHashMap<>();
@@ -138,6 +145,9 @@ public class BlogServer {
             }
             byte[] body = is.readAllBytes();
             ex.getResponseHeaders().set("Content-Type", contentTypeFor(path));
+            ex.getResponseHeaders().set("X-Content-Type-Options", "nosniff");
+            ex.getResponseHeaders().set("X-Frame-Options", "SAMEORIGIN");
+            ex.getResponseHeaders().set("Referrer-Policy", "strict-origin-when-cross-origin");
             ex.sendResponseHeaders(200, body.length);
             try (OutputStream os = ex.getResponseBody()) {
                 os.write(body);
@@ -158,6 +168,42 @@ public class BlogServer {
             case "ico"  -> "image/x-icon";
             default     -> "application/octet-stream";
         };
+    }
+
+    static void handleClusters(HttpExchange ex) throws IOException {
+        addCorsHeaders(ex);
+        if ("OPTIONS".equalsIgnoreCase(ex.getRequestMethod())) {
+            ex.sendResponseHeaders(204, -1);
+            ex.close();
+            return;
+        }
+        if (!"GET".equalsIgnoreCase(ex.getRequestMethod())) {
+            sendJson(ex, 405, Map.of("error", "Method not allowed"));
+            return;
+        }
+        if (clustersCache == null) {
+            synchronized (BlogServer.class) {
+                if (clustersCache == null) {
+                    Path p = Path.of("eval/clusters.json");
+                    if (Files.exists(p)) {
+                        clustersCache = Files.readString(p, StandardCharsets.UTF_8);
+                    }
+                }
+            }
+        }
+        if (clustersCache == null) {
+            byte[] err = "{\"error\":\"Cluster index not built. Run BlogClusterer first.\"}".getBytes(StandardCharsets.UTF_8);
+            ex.getResponseHeaders().set("Content-Type", "application/json; charset=utf-8");
+            ex.getResponseHeaders().set("X-Content-Type-Options", "nosniff");
+            ex.sendResponseHeaders(404, err.length);
+            try (OutputStream os = ex.getResponseBody()) { os.write(err); }
+            return;
+        }
+        byte[] bytes = clustersCache.getBytes(StandardCharsets.UTF_8);
+        ex.getResponseHeaders().set("Content-Type", "application/json; charset=utf-8");
+        ex.getResponseHeaders().set("X-Content-Type-Options", "nosniff");
+        ex.sendResponseHeaders(200, bytes.length);
+        try (OutputStream os = ex.getResponseBody()) { os.write(bytes); }
     }
 
     static void handleHealth(HttpExchange ex) throws IOException {
@@ -183,6 +229,7 @@ public class BlogServer {
     private static void sendJson(HttpExchange ex, int code, Object body) throws IOException {
         byte[] bytes = GSON.toJson(body).getBytes(StandardCharsets.UTF_8);
         ex.getResponseHeaders().set("Content-Type", "application/json; charset=utf-8");
+        ex.getResponseHeaders().set("X-Content-Type-Options", "nosniff");
         ex.sendResponseHeaders(code, bytes.length);
         try (OutputStream os = ex.getResponseBody()) {
             os.write(bytes);
