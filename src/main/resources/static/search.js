@@ -14,6 +14,9 @@
   let debounceHandle = null;
   let activeController = null;
   let topResults = null;
+  let explainMode = false;
+  let lastQuery = null;
+  let lastItems = null;
 
   function show(el) { el.hidden = false; }
   function hide(el) { el.hidden = true; }
@@ -43,6 +46,23 @@
 
   function renderResults(items, showScore) {
     results.replaceChildren();
+
+    // Toggle link shown above results when a query is active.
+    if (showScore && items.length > 0) {
+      const toggleRow = document.createElement('div');
+      toggleRow.className = 'explain-toggle';
+      const toggleLink = document.createElement('a');
+      toggleLink.href = '#';
+      toggleLink.textContent = explainMode ? 'hide scores' : 'show scores';
+      toggleLink.addEventListener('click', (e) => {
+        e.preventDefault();
+        explainMode = !explainMode;
+        if (lastQuery !== null) runSearch(lastQuery);
+      });
+      toggleRow.appendChild(toggleLink);
+      results.appendChild(toggleRow);
+    }
+
     const frag = document.createDocumentFragment();
     for (const r of items) {
       const li = document.createElement('li');
@@ -70,6 +90,19 @@
       url.className = 'result-url';
       url.textContent = truncate(r.url, 80);
       main.appendChild(url);
+
+      if (explainMode && r.bm25Score != null) {
+        const det = document.createElement('details');
+        det.className = 'result-explain';
+        const sum = document.createElement('summary');
+        sum.textContent = 'score breakdown';
+        det.appendChild(sum);
+        const span = document.createElement('span');
+        span.textContent =
+          `bm25: ${r.bm25Score.toFixed(3)} · pagerank ×${r.pageRankMultiplier.toFixed(3)} · final: ${r.score.toFixed(3)}`;
+        det.appendChild(span);
+        main.appendChild(det);
+      }
 
       li.appendChild(main);
 
@@ -126,6 +159,7 @@
   async function runSearch(q) {
     const trimmed = q.trim();
     if (!trimmed) {
+      lastQuery = null; lastItems = null;
       hide(status); hide(error);
       showTopAsDefault();
       return;
@@ -139,12 +173,15 @@
     show(status);
 
     try {
-      const url = `/search?q=${encodeURIComponent(trimmed)}&top=${TOP_N}`;
+      let url = `/search?q=${encodeURIComponent(trimmed)}&top=${TOP_N}`;
+      if (explainMode) url += '&explain=1';
       const res = await fetch(url, { signal: activeController.signal });
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const data = await res.json();
       hide(status);
       const items = Array.isArray(data.results) ? data.results : [];
+      lastQuery = trimmed;
+      lastItems = items;
       if (items.length === 0) {
         clearResults();
         setText(status, `No results for «${trimmed}»`);
@@ -172,6 +209,14 @@
     e.preventDefault();
     clearTimeout(debounceHandle);
     runSearch(input.value);
+  });
+
+  document.querySelectorAll('.chip').forEach((chip) => {
+    chip.addEventListener('click', () => {
+      input.value = chip.dataset.query;
+      clearTimeout(debounceHandle);
+      runSearch(input.value);
+    });
   });
 
   loadStats();
