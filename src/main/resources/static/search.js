@@ -91,6 +91,13 @@
       url.textContent = truncate(r.url, 80);
       main.appendChild(url);
 
+      if (r.tldr) {
+        const tldr = document.createElement('p');
+        tldr.className = 'result-tldr';
+        tldr.textContent = r.tldr;
+        main.appendChild(tldr);
+      }
+
       if (explainMode && r.bm25Score != null) {
         const det = document.createElement('details');
         det.className = 'result-explain';
@@ -106,6 +113,18 @@
 
       li.appendChild(main);
 
+      // "More like this" button + inline neighbor panel
+      if (typeof r.docId === 'number') {
+        const mltBar = document.createElement('div');
+        mltBar.className = 'mlt-bar';
+        const mltBtn = document.createElement('button');
+        mltBtn.className = 'mlt-btn';
+        mltBtn.textContent = 'More like this';
+        mltBtn.addEventListener('click', () => toggleNeighbors(li, r.docId, r.company, false));
+        mltBar.appendChild(mltBtn);
+        li.appendChild(mltBar);
+      }
+
       if (showScore && typeof r.score === 'number') {
         const score = document.createElement('div');
         score.className = 'result-score';
@@ -117,6 +136,56 @@
       frag.appendChild(li);
     }
     results.appendChild(frag);
+  }
+
+  async function toggleNeighbors(li, docId, company, excludeCompany) {
+    const existing = li.querySelector('.neighbor-panel');
+    if (existing && !excludeCompany) { existing.remove(); return; }
+    if (existing) existing.remove();
+
+    const panel = document.createElement('div');
+    panel.className = 'neighbor-panel';
+    panel.textContent = 'loading…';
+    li.appendChild(panel);
+
+    const url = `/more-like?docId=${docId}&top=5` +
+                (excludeCompany ? `&exclude=${encodeURIComponent(company)}` : '');
+    try {
+      const res = await fetch(url);
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const data = await res.json();
+      panel.replaceChildren();
+      const heading = document.createElement('div');
+      heading.className = 'neighbor-heading';
+      heading.textContent = excludeCompany ? `Similar posts (other companies)` : 'Similar posts';
+      panel.appendChild(heading);
+      const list = document.createElement('ul');
+      list.className = 'neighbor-list';
+      for (const n of (data.results || [])) {
+        const item = document.createElement('li');
+        const a = document.createElement('a');
+        a.href = n.url; a.target = '_blank'; a.rel = 'noopener noreferrer';
+        a.textContent = n.title || n.url;
+        item.appendChild(a);
+        if (n.company) {
+          const co = document.createElement('span');
+          co.className = 'neighbor-company';
+          co.textContent = ' · ' + n.company;
+          item.appendChild(co);
+        }
+        list.appendChild(item);
+      }
+      panel.appendChild(list);
+      if (!excludeCompany && company) {
+        const diverse = document.createElement('button');
+        diverse.className = 'mlt-btn mlt-diverse';
+        diverse.textContent = 'From other companies →';
+        diverse.addEventListener('click', () => toggleNeighbors(li, docId, company, true));
+        panel.appendChild(diverse);
+      }
+    } catch (e) {
+      panel.textContent = 'Could not load similar posts.';
+    }
   }
 
   function showTopAsDefault() {
