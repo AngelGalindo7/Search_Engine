@@ -68,7 +68,8 @@ public class BlogTldrExtractor {
         }
 
         for (Path jsonPath : jsonFiles) {
-            try (Reader reader = new FileReader(jsonPath.toFile())) {
+            try (Reader reader = new InputStreamReader(
+                    new FileInputStream(jsonPath.toFile()), java.nio.charset.StandardCharsets.UTF_8)) {
                 @SuppressWarnings("unchecked")
                 Map<String, Object> doc = gson.fromJson(reader, Map.class);
                 if (doc == null) continue;
@@ -79,8 +80,10 @@ public class BlogTldrExtractor {
                 Integer docId = urlToDocId.get(url);
                 if (docId == null) continue;
 
-                Object textObj = doc.get("text");
-                String body = (textObj != null) ? textObj.toString().trim() : "";
+                // BLOGS JSON stores raw HTML in "content", not plain text.
+                Object contentObj = doc.get("content");
+                if (contentObj == null) { nullCount++; continue; }
+                String body = org.jsoup.Jsoup.parse(contentObj.toString()).text().trim();
                 String tldr = extractTldr(body);
                 if (tldr != null) {
                     tldrs.put(docId, tldr);
@@ -93,7 +96,14 @@ public class BlogTldrExtractor {
             }
         }
 
-        try (BufferedWriter writer = Files.newBufferedWriter(Path.of("blog_tldr.txt"))) {
+        // Use a charset encoder that replaces lone surrogates (from corrupt HTML sources)
+        // rather than throwing MalformedInputException.
+        java.nio.charset.CharsetEncoder enc = java.nio.charset.StandardCharsets.UTF_8.newEncoder()
+                .onMalformedInput(java.nio.charset.CodingErrorAction.REPLACE)
+                .onUnmappableCharacter(java.nio.charset.CodingErrorAction.REPLACE);
+        try (BufferedWriter writer = new BufferedWriter(
+                new java.io.OutputStreamWriter(
+                        new java.io.FileOutputStream("blog_tldr.txt"), enc))) {
             for (Map.Entry<Integer, String> entry : tldrs.entrySet()) {
                 writer.write(entry.getKey() + "\t" + entry.getValue());
                 writer.newLine();

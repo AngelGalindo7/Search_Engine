@@ -57,13 +57,13 @@ public class BlogClusterer {
         if (!Files.exists(path)) throw new IOException("blog_embeddings.bin not found");
         try (FileChannel ch = FileChannel.open(path, StandardOpenOption.READ)) {
             // header: [N:int32][dim:int32] little-endian
-            ByteBuffer hdr = ByteBuffer.allocate(8).order(ByteOrder.LITTLE_ENDIAN);
+            ByteBuffer hdr = ByteBuffer.allocate(8);  // default BIG_ENDIAN, matches writer
             while (hdr.hasRemaining()) if (ch.read(hdr) < 0) break;
             hdr.flip();
             int n   = hdr.getInt();
             int dim = hdr.getInt();
             float[][] mat = new float[n][dim];
-            ByteBuffer row = ByteBuffer.allocate(dim * 4).order(ByteOrder.LITTLE_ENDIAN);
+            ByteBuffer row = ByteBuffer.allocate(dim * 4);
             for (int i = 0; i < n; i++) {
                 row.clear();
                 while (row.hasRemaining()) if (ch.read(row) < 0) break;
