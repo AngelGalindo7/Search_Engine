@@ -382,9 +382,6 @@ public class BlogSearch {
     static List<SearchResult> bm25Search(String query, int topN, boolean explain) {
         if (query == null || query.isBlank()) return Collections.emptyList();
 
-        // Expand acronyms bidirectionally, then add bigrams so compound-noun
-        // queries ("write-ahead logging") can match phrase tokens in the index.
-        // List<String> queryTokens = Tokenizer.tokenize(query);
         List<String> queryTokens = new ArrayList<>(Tokenizer.tokenize(expandSynonyms(query)));
         queryTokens.addAll(Tokenizer.getNGrams(new ArrayList<>(queryTokens), 2));
         Map<String, List<Posting>> queryIndex = new HashMap<>();
@@ -393,23 +390,28 @@ public class BlogSearch {
             queryIndex.put(token, postings == null ? Collections.emptyList() : postings);
         }
 
-        Map<Integer, Double> docRank = new HashMap<>();
+        // Array accumulator: O(1) indexed by docId, no boxing, cache-friendly.
+        double[] scores = new double[TOTAL_DOCS];
+        boolean[] inTouched = new boolean[TOTAL_DOCS];
+        List<Integer> touched = new ArrayList<>();
         // explain captures: raw BM25 sum (before prBoost) and the per-doc prBoost value.
         Map<Integer, Double> explainBm25   = explain ? new HashMap<>() : null;
         Map<Integer, Double> explainPrMult = explain ? new HashMap<>() : null;
+
         for (Map.Entry<String, List<Posting>> entry : queryIndex.entrySet()) {
             String token = entry.getKey();
             TokenMeta tm = tokenMetadata.get(token);
             if (tm == null) continue;
-            // Skip rare bigrams: their max-IDF dominates BM25 and surfaces marginal docs
-            // (one matching phrase in a heading) over docs with strong unigram coverage.
+            // Skip rare bigrams: their max-IDF dominates BM25 and surfaces marginal docs.
             if (token.indexOf(' ') >= 0 && tm.df < BIGRAM_MIN_DF) continue;
             int df = tm.df;
-            // Buggy: the +0.5 ended up added to the quotient, not the denominator.
-            // double idf = Math.log(((TOTAL_DOCS - df + 0.5) / df + 0.5) + 1);
+            // Skip ultra-high-DF tokens: appearing in >50% of corpus means IDF ≈ log(1+1) ≈ 0.69
+            // — nearly zero discriminative power but forces a scan of thousands of postings.
+            if (df > TOTAL_DOCS / 2) continue;
             double idf = Math.log((TOTAL_DOCS - df + 0.5) / (df + 0.5) + 1);
 
             for (Posting p : entry.getValue()) {
+                if (p.docId < 0 || p.docId >= TOTAL_DOCS) continue;
                 BlogDocMeta meta = docMetadata.get(p.docId);
                 if (meta == null) continue;
 
@@ -420,11 +422,15 @@ public class BlogSearch {
                 double bm25 = (num / denom) * idf;
                 double tagMult = getTagMultiplier(p.tagMask);
                 double relevance = bm25 * tagMult;
-
                 double prBoost = ALPHA * Math.max(0, Math.log10(meta.pageRank * SCALE + 1e-9));
                 double finalScore = relevance + prBoost;
 
-                docRank.merge(p.docId, finalScore, Double::sum);
+                if (!inTouched[p.docId]) {
+                    inTouched[p.docId] = true;
+                    touched.add(p.docId);
+                }
+                scores[p.docId] += finalScore;
+
                 if (explain) {
                     explainBm25.merge(p.docId, relevance, Double::sum);
                     // prBoost is doc-fixed; last write wins (all postings produce same value).
@@ -436,44 +442,46 @@ public class BlogSearch {
         // Lift scores for posts from a known author's domain when their name appears in the query.
         String authorDomain = detectAuthorDomain(query);
         if (authorDomain != null) {
-            String ad = authorDomain;
-            docRank.replaceAll((id, score) -> {
+            for (int id : touched) {
                 BlogDocMeta m = docMetadata.get(id);
-                return m != null && registrableDomain(m.url).equals(ad) ? score * AUTHOR_BOOST : score;
-            });
+                if (m != null && registrableDomain(m.url).equals(authorDomain))
+                    scores[id] *= AUTHOR_BOOST;
+            }
         }
 
-        if (docRank.isEmpty()) return Collections.emptyList();
+        if (touched.isEmpty()) return Collections.emptyList();
 
-        List<Integer> ranked = new ArrayList<>(docRank.keySet());
-        ranked.sort(Comparator.comparing(docRank::get).reversed());
+        // Sort all candidates by raw score descending (array lookup is cache-friendly).
+        touched.sort((a, b) -> Double.compare(scores[b], scores[a]));
 
-        // Domain diversification: walk the ranked list in score order and apply 0.85^k decay
-        // where k is the count of prior same-domain results. Re-sort by decayed score so the
-        // first hit per domain rises and subsequent same-domain hits drop.
+        // Domain diversification over the top-K candidates only.
+        // Diversification can only reduce scores, so no doc outside top-K can jump into topN.
+        int K = Math.min(topN * 10, touched.size());
+        List<double[]> candidates = new ArrayList<>(K); // [docId, diversifiedScore]
         Map<String, Integer> domainSeen = new HashMap<>();
-        Map<Integer, Double> diversifiedRank = new HashMap<>();
-        for (int docId : ranked) {
+        for (int i = 0; i < K; i++) {
+            int docId = touched.get(i);
             BlogDocMeta m = docMetadata.get(docId);
             String domain = registrableDomain(m.url);
             int k = domainSeen.getOrDefault(domain, 0);
-            diversifiedRank.put(docId, docRank.get(docId) * Math.pow(DOMAIN_DECAY, k));
+            candidates.add(new double[]{docId, scores[docId] * Math.pow(DOMAIN_DECAY, k)});
             domainSeen.put(domain, k + 1);
         }
-        ranked.sort(Comparator.comparing(diversifiedRank::get).reversed());
+        candidates.sort((a, b) -> Double.compare(b[1], a[1]));
 
-        int top = Math.min(topN, ranked.size());
+        int top = Math.min(topN, candidates.size());
         List<SearchResult> out = new ArrayList<>(top);
         for (int i = 0; i < top; i++) {
-            int docId = ranked.get(i);
+            int docId = (int) candidates.get(i)[0];
+            double score = candidates.get(i)[1];
             BlogDocMeta m = docMetadata.get(docId);
             String tldr = tldrCache != null ? tldrCache.get(docId) : null;
             if (explain) {
-                out.add(new SearchResult(docId, diversifiedRank.get(docId), m.title, m.company, m.url,
+                out.add(new SearchResult(docId, score, m.title, m.company, m.url,
                         tldr, explainBm25.getOrDefault(docId, 0.0),
                         explainPrMult.getOrDefault(docId, 0.0), m.postDate));
             } else {
-                out.add(new SearchResult(docId, diversifiedRank.get(docId), m.title, m.company, m.url,
+                out.add(new SearchResult(docId, score, m.title, m.company, m.url,
                         tldr, null, null, m.postDate));
             }
         }
@@ -665,8 +673,11 @@ public class BlogSearch {
             indexChannel = FileChannel.open(path, StandardOpenOption.READ);
             long size = indexChannel.size();
             indexMmap = indexChannel.map(FileChannel.MapMode.READ_ONLY, 0, size);
-            indexMmap.load();  // eagerly fault in all pages; one-time ~2-3s startup cost, eliminates page-fault variance on queries
-            System.out.printf("Mapped and loaded blog_index.bin (%d MB) into page cache%n",
+            // Force all pages into OS page cache; eliminates per-query page-fault variance.
+            ByteBuffer warmup = indexMmap.duplicate();
+            byte[] drain = new byte[1 << 16];
+            while (warmup.remaining() >= drain.length) warmup.get(drain);
+            System.out.printf("Mapped and warmed blog_index.bin (%d MB)%n",
                     size / (1024 * 1024));
         } catch (IOException e) {
             System.err.println("WARN: could not mmap blog_index.bin: " + e.getMessage());
