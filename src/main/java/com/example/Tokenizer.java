@@ -12,8 +12,8 @@ public class Tokenizer {
     private static final Pattern DOT        = Pattern.compile("\\.");
     private static final Pattern NON_ALNUM  = Pattern.compile("[^a-z0-9\\s]");
     private static final Pattern WHITESPACE = Pattern.compile("\\s+");
-    // PorterStemmer is not thread-safe but indexing is single-threaded; one instance is fine.
-    private static final PorterStemmer STEMMER = new PorterStemmer();
+    // PorterStemmer is not thread-safe; BlogServer runs 4 threads, so use one instance per thread.
+    private static final ThreadLocal<PorterStemmer> STEMMER = ThreadLocal.withInitial(PorterStemmer::new);
 
     public static void main(String[] args) {
         List<String> tokens = getNGrams(tokenize("wics ics hello test grace hopper"), 2);
@@ -33,7 +33,7 @@ public class Tokenizer {
 
         for (String token : tokenArray) {
             if (token.length() < 50) {
-                String stemmed = STEMMER.stem(token);
+                String stemmed = STEMMER.get().stem(token);
                 resultTokens.add(stemmed);
             }
         }
