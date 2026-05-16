@@ -1,0 +1,216 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>About — feedstack</title>
+    <link rel="stylesheet" href="/static/style.css" />
+  </head>
+  <body>
+    <header class="topbar">
+      <div class="topbar-inner">
+        <a href="/" class="topbar-brand topbar-brand-link">feedstack</a>
+        <nav class="topbar-nav" role="navigation">
+          <button class="tab" onclick="location.href='/?tab=top'">Top</button>
+          <button class="tab" onclick="location.href='/?tab=recent'">Recent</button>
+          <button class="tab" onclick="location.href='/?tab=explore'">Explore</button>
+          <a href="/about" class="tab active">About</a>
+        </nav>
+      </div>
+    </header>
+    <div class="app about-app">
+
+      <div class="about-hero">
+        <h1 class="about-title">A search engine for engineering blogs</h1>
+        <p class="about-subtitle">
+          End-to-end information retrieval system — crawler, indexer, ranker, and UI —
+          built in Java with no external search frameworks.
+        </p>
+      </div>
+
+      <div class="about-subtabs" role="tablist">
+        <button class="about-subtab active" role="tab" aria-selected="true"  data-tab="about" onclick="switchTab('about')">Overview</button>
+        <button class="about-subtab"        role="tab" aria-selected="false" data-tab="eval"  onclick="switchTab('eval')">Eval</button>
+      </div>
+
+      <!-- About panel -->
+      <div id="panel-about" class="about-panel">
+        <div class="about-metrics">
+          <div class="metric-card">
+            <span class="metric-num" id="m-posts">—</span>
+            <span class="metric-label">posts indexed</span>
+          </div>
+          <div class="metric-card">
+            <span class="metric-num" id="m-blogs">—</span>
+            <span class="metric-label">company blogs</span>
+          </div>
+          <div class="metric-card">
+            <span class="metric-num" id="m-tokens">—</span>
+            <span class="metric-label">unique index terms</span>
+          </div>
+          <div class="metric-card">
+            <span class="metric-num" id="m-latency">—</span>
+            <span class="metric-label">avg query latency</span>
+          </div>
+        </div>
+
+        <div class="about-cols">
+          <div class="about-section">
+            <h2 class="about-section-title">Pipeline</h2>
+            <div class="pipeline">
+              <div class="pipeline-step">
+                <div class="pipeline-num">1</div>
+                <div class="pipeline-body">
+                  <strong>Crawl</strong>
+                  <p>Ingests 400+ RSS feeds via an OPML feed list. Respects robots.txt, enforces per-domain rate limits, and validates redirects to block SSRF.</p>
+                </div>
+              </div>
+              <div class="pipeline-step">
+                <div class="pipeline-num">2</div>
+                <div class="pipeline-body">
+                  <strong>Index</strong>
+                  <p>Custom tokenizer with Porter stemming and bigram generation writes a compact binary inverted index. Token and doc metadata are stored in flat text files for fast loading.</p>
+                </div>
+              </div>
+              <div class="pipeline-step">
+                <div class="pipeline-num">3</div>
+                <div class="pipeline-body">
+                  <strong>Rank</strong>
+                  <p>Queries score with BM25 for term relevance, multiplied by a PageRank signal built from the inter-blog citation graph. Domain diversification prevents one blog from dominating results.</p>
+                </div>
+              </div>
+              <div class="pipeline-step">
+                <div class="pipeline-num">4</div>
+                <div class="pipeline-body">
+                  <strong>Discover</strong>
+                  <p>"More like this" uses dense embeddings and cosine similarity to surface related posts. K-means clustering groups the full corpus into browsable topic areas.</p>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div class="about-section">
+            <h2 class="about-section-title">Stack</h2>
+            <div class="tech-tags" style="flex-direction:column;">
+              <span class="tech-tag">Java</span>
+              <span class="tech-tag">BM25</span>
+              <span class="tech-tag">PageRank</span>
+              <span class="tech-tag">Porter stemmer</span>
+              <span class="tech-tag">Inverted index</span>
+              <span class="tech-tag">RSS / OPML</span>
+              <span class="tech-tag">Dense embeddings</span>
+              <span class="tech-tag">K-means clustering</span>
+              <span class="tech-tag">Vanilla JS</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Eval panel -->
+      <div id="panel-eval" class="about-panel" style="display:none;">
+        <div class="about-section">
+          <p style="font-size:0.88em;color:var(--meta);margin:0 0 16px;line-height:1.55;max-width:560px;">
+            Relevance was evaluated on 44 queries across 6 topic categories, rated 0–3 by GPT-4o-mini.
+            NDCG@10 measures how well the top 10 results are ranked by quality; MRR captures how high the
+            first relevant result appears.
+          </p>
+          <table style="width:100%;border-collapse:collapse;font-size:0.88em;">
+            <thead>
+              <tr style="border-bottom:2px solid var(--border);">
+                <th style="text-align:left;padding:6px 12px 6px 0;color:var(--muted);font-weight:600;font-size:0.74em;text-transform:uppercase;letter-spacing:0.06em;">Category</th>
+                <th style="text-align:right;padding:6px 8px;color:var(--muted);font-weight:600;font-size:0.74em;text-transform:uppercase;letter-spacing:0.06em;">n</th>
+                <th style="text-align:right;padding:6px 8px;color:var(--muted);font-weight:600;font-size:0.74em;text-transform:uppercase;letter-spacing:0.06em;">NDCG@10</th>
+                <th style="text-align:right;padding:6px 0 6px 8px;color:var(--muted);font-weight:600;font-size:0.74em;text-transform:uppercase;letter-spacing:0.06em;">MRR</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr style="border-bottom:1px solid var(--border);">
+                <td style="padding:8px 12px 8px 0;color:var(--meta);">Ambiguous / Hard</td>
+                <td style="padding:8px;text-align:right;color:var(--meta);">7</td>
+                <td style="padding:8px;text-align:right;color:var(--meta);">0.929</td>
+                <td style="padding:8px 0 8px 8px;text-align:right;color:var(--meta);">1.000</td>
+              </tr>
+              <tr style="border-bottom:1px solid var(--border);">
+                <td style="padding:8px 12px 8px 0;color:var(--meta);">Known-Author Probes</td>
+                <td style="padding:8px;text-align:right;color:var(--meta);">3</td>
+                <td style="padding:8px;text-align:right;color:var(--meta);">0.838</td>
+                <td style="padding:8px 0 8px 8px;text-align:right;color:var(--meta);">1.000</td>
+              </tr>
+              <tr style="border-bottom:1px solid var(--border);">
+                <td style="padding:8px 12px 8px 0;color:var(--meta);">ML / Data Infra</td>
+                <td style="padding:8px;text-align:right;color:var(--meta);">9</td>
+                <td style="padding:8px;text-align:right;color:var(--meta);">0.802</td>
+                <td style="padding:8px 0 8px 8px;text-align:right;color:var(--meta);">0.889</td>
+              </tr>
+              <tr style="border-bottom:1px solid var(--border);">
+                <td style="padding:8px 12px 8px 0;color:var(--meta);">Architecture Concepts</td>
+                <td style="padding:8px;text-align:right;color:var(--meta);">8</td>
+                <td style="padding:8px;text-align:right;color:var(--meta);">0.747</td>
+                <td style="padding:8px 0 8px 8px;text-align:right;color:var(--meta);">0.701</td>
+              </tr>
+              <tr style="border-bottom:1px solid var(--border);">
+                <td style="padding:8px 12px 8px 0;color:var(--meta);">Language / Runtime</td>
+                <td style="padding:8px;text-align:right;color:var(--meta);">9</td>
+                <td style="padding:8px;text-align:right;color:var(--meta);">0.717</td>
+                <td style="padding:8px 0 8px 8px;text-align:right;color:var(--meta);">0.815</td>
+              </tr>
+              <tr style="border-bottom:1px solid var(--border);">
+                <td style="padding:8px 12px 8px 0;color:var(--meta);">Systems &amp; Performance</td>
+                <td style="padding:8px;text-align:right;color:var(--meta);">6</td>
+                <td style="padding:8px;text-align:right;color:var(--meta);">0.614</td>
+                <td style="padding:8px 0 8px 8px;text-align:right;color:var(--meta);">0.667</td>
+              </tr>
+              <tr>
+                <td style="padding:10px 12px 8px 0;font-weight:600;color:var(--fg);">Overall</td>
+                <td style="padding:10px 8px 8px;text-align:right;font-weight:600;color:var(--fg);">42</td>
+                <td style="padding:10px 8px 8px;text-align:right;font-weight:600;color:var(--fg);">0.770</td>
+                <td style="padding:10px 0 8px 8px;text-align:right;font-weight:600;color:var(--fg);">0.832</td>
+              </tr>
+            </tbody>
+          </table>
+          <p style="font-size:0.82em;color:var(--muted);margin:12px 0 0;">
+            Negative-query filter: 2 of 2 nonsense queries returned zero results.
+          </p>
+        </div>
+      </div>
+
+      <footer class="site-footer">
+        <span class="ranking-info">BM25 &middot; PageRank &middot; dense rerank</span>
+        <!-- search link removed -->
+      </footer>
+    </div>
+
+    <script>
+      function switchTab(name) {
+        document.querySelectorAll('.about-subtab').forEach(b => {
+          const active = b.dataset.tab === name;
+          b.classList.toggle('active', active);
+          b.setAttribute('aria-selected', active);
+        });
+        document.querySelectorAll('.about-panel').forEach(p => {
+          p.style.display = p.id === 'panel-' + name ? '' : 'none';
+        });
+      }
+
+      (async () => {
+        const fmt = n => Number(n).toLocaleString();
+        try {
+          const res = await fetch('/stats');
+          if (res.ok) {
+            const s = await res.json();
+            if (s.totalDocs)    document.getElementById('m-posts').textContent   = fmt(s.totalDocs);
+            if (s.totalBlogs)   document.getElementById('m-blogs').textContent   = fmt(s.totalBlogs);
+            if (s.totalTokens)  document.getElementById('m-tokens').textContent  = fmt(s.totalTokens);
+          }
+        } catch (_) {}
+        try {
+          const r2 = await fetch('/search?q=distributed+systems&top=1');
+          if (r2.ok) {
+            const d = await r2.json();
+            if (d.tookMs != null) document.getElementById('m-latency').textContent = d.tookMs + ' ms';
+          }
+        } catch (_) {}
+      })();
+    </script>
+  </body>
+</html>

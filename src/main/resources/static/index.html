@@ -3,44 +3,58 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>feedstack — engineering blog search</title>
+    <title>feedstack — engineering blogs</title>
     <link rel="stylesheet" href="/static/style.css" />
   </head>
   <body>
-    <div class="app">
-      <header class="header">
-        <h1 class="title">feedstack</h1>
-        <p class="tagline">Search 13,000+ engineering blog posts from 400+ companies</p>
-        <p class="stats-strip" id="stats-strip">loading corpus…</p>
-        <form id="search-form" class="search-form" role="search" autocomplete="off">
-          <input
-            id="search-input"
-            type="search"
-            class="search-input"
-            placeholder="raft consensus, BM25, kubernetes networking…"
-            autofocus
-            spellcheck="false"
-          />
-        </form>
-        <div class="topic-chips" id="topic-chips">
-          <button class="chip" data-query="distributed systems consensus">Distributed Systems</button>
-          <button class="chip" data-query="database internals storage engine">Database Internals</button>
-          <button class="chip" data-query="ML infrastructure training serving">ML Infrastructure</button>
-          <button class="chip" data-query="rust systems programming">Rust &amp; Systems</button>
-          <button class="chip" data-query="kubernetes container orchestration">Kubernetes</button>
+    <header class="topbar">
+      <div class="topbar-inner">
+        <span class="topbar-brand">feedstack</span>
+        <div class="topbar-search-wrap search-wrap">
+          <form id="hero-form" class="search-form" role="search" autocomplete="off">
+            <input
+              id="hero-input"
+              type="search"
+              class="search-input"
+              placeholder="search 8,000+ engineering posts…"
+              spellcheck="false"
+            />
+          </form>
+          <ul id="search-dropdown" class="search-dropdown" hidden></ul>
         </div>
-      </header>
+        <nav class="topbar-nav" role="tablist">
+          <button class="tab active" role="tab" data-tab="top">Top</button>
+          <button class="tab" role="tab" data-tab="recent">Recent</button>
+          <button class="tab" role="tab" data-tab="explore">Explore</button>
+          <a href="/about" class="tab" role="tab">About</a>
+        </nav>
+      </div>
+    </header>
+    <div class="app">
+      <div id="hero" class="hero">
+        <!-- hero-label and hero-search-wrap moved to topbar -->
+        <p class="stats-strip" id="stats-strip">loading corpus…</p>
+      </div>
       <main class="main">
-        <p id="top-label" class="section-label" hidden>Most cited in this corpus</p>
+        <div id="search-controls" hidden>
+          <p class="section-label" style="margin-top:12px">Categories</p>
+          <div class="topic-chips" id="topic-chips">
+            <button class="chip" data-query="distributed systems consensus">Distributed Systems</button>
+            <button class="chip" data-query="database internals storage engine">Database Internals</button>
+            <button class="chip" data-query="ML infrastructure training serving">ML Infrastructure</button>
+            <button class="chip" data-query="rust systems programming">Rust &amp; Systems</button>
+            <button class="chip" data-query="kubernetes container orchestration">Kubernetes</button>
+          </div>
+        </div>
+        <p id="top-label" class="section-label" hidden style="margin-bottom:10px">Top posts</p>
         <p id="status" class="status" hidden></p>
         <p id="error" class="error" hidden></p>
         <ol id="results" class="results"></ol>
+        <div id="explore-content"></div>
         <footer id="footer" class="footer" hidden></footer>
       </main>
       <footer class="site-footer">
         <span class="ranking-info">BM25 &middot; PageRank &middot; dense rerank</span>
-        <a href="/about" class="about-link">About this project</a>
-        <a href="/static/explore.html" class="explore-link">Explore topics &rarr;</a>
       </footer>
     </div>
     <script src="/static/search.js" defer></script>
