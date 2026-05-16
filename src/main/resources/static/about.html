@@ -10,6 +10,17 @@
     <header class="topbar">
       <div class="topbar-inner">
         <a href="/" class="topbar-brand topbar-brand-link">feedstack</a>
+        <div class="topbar-search-wrap search-wrap">
+          <form class="search-form" role="search" autocomplete="off" action="/" method="get">
+            <input
+              type="search"
+              name="q"
+              class="search-input"
+              placeholder="search 8,000+ engineering posts…"
+              spellcheck="false"
+            />
+          </form>
+        </div>
         <nav class="topbar-nav" role="navigation">
           <button class="tab" onclick="location.href='/?tab=top'">Top</button>
           <button class="tab" onclick="location.href='/?tab=recent'">Recent</button>
