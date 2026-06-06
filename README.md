@@ -2,7 +2,7 @@
 
 Search engine over **13,594 posts** from **446 engineering blogs** (Stripe, Cloudflare, Netflix, Discord, Datadog, Uber, brooker.co.za, danluu.com, jvns.ca, etc). Java backend, custom binary inverted index, BM25 + PageRank, plus a dense reranker. Crawler is hardened against XXE and SSRF.
 
-**Live:** [engineering-blog-search.onrender.com](https://engineering-blog-search.onrender.com/)
+**Live:** [feedstack.fly.dev](https://feedstack.fly.dev/)
 
 ---
 
